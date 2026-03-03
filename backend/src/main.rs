@@ -35,8 +35,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = Arc::new(AppState {
         db,
         session_secret: std::env::var("SESSION_SECRET").unwrap_or_else(|_| "dev-secret".into()),
-        google_client_id: std::env::var("GOOGLE_CLIENT_ID").unwrap_or_default(),
-        google_client_secret: std::env::var("GOOGLE_CLIENT_SECRET").unwrap_or_default(),
+        google_client_id: std::env::var("GOOGLE_CLIENT_ID")
+            .expect("GOOGLE_CLIENT_ID is required for Google OAuth"),
+        google_client_secret: std::env::var("GOOGLE_CLIENT_SECRET")
+            .expect("GOOGLE_CLIENT_SECRET is required for Google OAuth"),
         server_admin_emails,
         pkce_store: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
     });

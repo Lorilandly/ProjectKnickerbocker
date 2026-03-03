@@ -152,7 +152,7 @@ pub async fn logout(
 
 fn oauth_client(state: &AppState) -> BasicClient {
     let redirect_url = std::env::var("AUTH_REDIRECT_URL")
-        .unwrap_or_else(|_| "http://localhost:8080/api/auth/callback".into());
+        .unwrap_or_else(|_| "http://localhost:5173/api/auth/callback".into());
 
     BasicClient::new(
         ClientId::new(state.google_client_id.clone()),
