@@ -1,0 +1,1038 @@
+openapi: 3.1.0
+info:
+  title: Project Knickerbocker API
+  version: 0.1.0
+  description: OpenAPI specification for the Rust Axum backend.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+paths:
+  /api/auth/google:
+    get:
+      tags: [Auth]
+      summary: Start Google OAuth login
+      security: []
+      responses:
+        "307":
+          description: Redirect to Google OAuth authorization URL
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/auth/callback:
+    get:
+      tags: [Auth]
+      summary: Google OAuth callback
+      security: []
+      parameters:
+        - in: query
+          name: code
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: state
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: error
+          schema:
+            type: string
+          required: false
+      responses:
+        "307":
+          description: Redirect to frontend with success or auth_error
+          headers:
+            Location:
+              schema:
+                type: string
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current authenticated user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthMeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout current user
+      responses:
+        "200":
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogoutResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/halls:
+    get:
+      tags: [Halls]
+      summary: List halls visible to current user
+      responses:
+        "200":
+          description: Hall list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Hall"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    post:
+      tags: [Halls]
+      summary: Create a hall (server admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHallRequest"
+      responses:
+        "201":
+          description: Created hall
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Hall"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/halls/{id}:
+    get:
+      tags: [Halls]
+      summary: Get hall by ID
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Hall
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Hall"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/halls/{id}/members:
+    get:
+      tags: [Halls]
+      summary: List hall members with user name/email
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Member tuples [HallMember, name, email]
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HallMemberTuple"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/halls/{id}/leaderboard:
+    get:
+      tags: [Halls]
+      summary: Hall leaderboard
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Leaderboard tuples [user_id, name, points]
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaderboardTuple"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/halls/{id}/assign:
+    post:
+      tags: [Halls]
+      summary: Assign user directly to hall (server admin only)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignUserRequest"
+      responses:
+        "204":
+          description: Assigned
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/halls/{id}/invite:
+    post:
+      tags: [Halls]
+      summary: Invite user to hall (hall admin/server admin)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteUserRequest"
+      responses:
+        "204":
+          description: Invite created/updated
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/halls/{id}/promote:
+    post:
+      tags: [Halls]
+      summary: Promote member to hall admin
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromoteUserRequest"
+      responses:
+        "204":
+          description: Promoted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/halls/{id}/invites:
+    get:
+      tags: [Halls]
+      summary: List pending invites for hall
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Pending invites
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HallInvite"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/halls/{id}/games:
+    get:
+      tags: [Games]
+      summary: List games in hall
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Game list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Game"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    post:
+      tags: [Games]
+      summary: Create game in hall
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGameRequest"
+      responses:
+        "201":
+          description: Created game
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/halls/{id}/stats:
+    get:
+      tags: [Stats]
+      summary: Get hall stats
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Hall statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HallStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/games/{id}:
+    get:
+      tags: [Games]
+      summary: Get game by ID
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Game
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    put:
+      tags: [Games]
+      summary: Update game by ID
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateGameRequest"
+      responses:
+        "200":
+          description: Updated game
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/games/{id}/sessions:
+    get:
+      tags: [Sessions]
+      summary: List sessions for game
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Session list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GameSession"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    post:
+      tags: [Sessions]
+      summary: Create a game session
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "201":
+          description: Created session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameSession"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/sessions/{id}:
+    get:
+      tags: [Sessions]
+      summary: Get session and its results
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Tuple [GameSession, SessionResult[]]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionDetailTuple"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/sessions/{id}/results:
+    post:
+      tags: [Sessions]
+      summary: Add or replace session results
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionResultsRequest"
+      responses:
+        "204":
+          description: Results saved
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/sessions/{id}/finalize:
+    post:
+      tags: [Sessions]
+      summary: Finalize session and apply hall points
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Session finalized
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/invites/me:
+    get:
+      tags: [Invites]
+      summary: List my pending invites
+      responses:
+        "200":
+          description: Tuples [HallInvite, hall_name]
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InviteWithHallNameTuple"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/invites/{id}/accept:
+    post:
+      tags: [Invites]
+      summary: Accept invite
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Invite accepted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/invites/{id}/decline:
+    post:
+      tags: [Invites]
+      summary: Decline invite
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Invite declined
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/users/me/history:
+    get:
+      tags: [Stats]
+      summary: Get authenticated user's session history
+      responses:
+        "200":
+          description: User history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserHistoryEntry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/users/me/stats:
+    get:
+      tags: [Stats]
+      summary: Get authenticated user's aggregated stats
+      responses:
+        "200":
+          description: User stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: token
+
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        text/plain:
+          schema:
+            type: string
+    Unauthorized:
+      description: Unauthorized
+      content:
+        text/plain:
+          schema:
+            type: string
+    Forbidden:
+      description: Forbidden
+      content:
+        text/plain:
+          schema:
+            type: string
+    NotFound:
+      description: Not found
+      content:
+        text/plain:
+          schema:
+            type: string
+    InternalServerError:
+      description: Internal server error
+      content:
+        text/plain:
+          schema:
+            type: string
+
+  schemas:
+    AuthMeResponse:
+      type: object
+      required: [id, email, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: string
+        name:
+          type: string
+        avatar_url:
+          type: string
+          nullable: true
+
+    LogoutResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+
+    Hall:
+      type: object
+      required: [id, name, created_by_user_id, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        created_by_user_id:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+
+    HallMember:
+      type: object
+      required: [id, hall_id, user_id, role, points, joined_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        hall_id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        role:
+          type: string
+          enum: [admin, member]
+        points:
+          type: number
+          format: double
+        joined_at:
+          type: string
+          format: date-time
+
+    HallInvite:
+      type: object
+      required: [id, hall_id, user_id, invited_by_user_id, status, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        hall_id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        invited_by_user_id:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [pending, accepted, declined]
+        created_at:
+          type: string
+          format: date-time
+
+    Game:
+      type: object
+      required: [id, hall_id, name, point_conversion_rate, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        hall_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        point_conversion_rate:
+          type: number
+          format: double
+        expected_sum_rule:
+          type: string
+          nullable: true
+          enum: [zero, fixed, custom, null]
+        created_at:
+          type: string
+          format: date-time
+
+    GameSession:
+      type: object
+      required: [id, game_id, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        game_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        finalized_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    SessionResult:
+      type: object
+      required: [id, session_id, user_id, points, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        session_id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        points:
+          type: number
+          format: double
+        created_at:
+          type: string
+          format: date-time
+
+    CreateHallRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    InviteUserRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+
+    AssignUserRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+
+    PromoteUserRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+
+    CreateGameRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        point_conversion_rate:
+          type: number
+          format: double
+          default: 1.0
+        expected_sum_rule:
+          type: string
+          nullable: true
+          enum: [zero, fixed, custom, null]
+
+    UpdateGameRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        point_conversion_rate:
+          type: number
+          format: double
+          nullable: true
+        expected_sum_rule:
+          type: string
+          nullable: true
+          enum: [zero, fixed, custom, null]
+
+    CreateSessionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+
+    SessionResultEntry:
+      type: object
+      required: [user_id, points]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        points:
+          type: number
+          format: double
+
+    SessionResultsRequest:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionResultEntry"
+
+    HallMemberTuple:
+      type: array
+      minItems: 3
+      maxItems: 3
+      prefixItems:
+        - $ref: "#/components/schemas/HallMember"
+        - type: string
+        - type: string
+
+    LeaderboardTuple:
+      type: array
+      minItems: 3
+      maxItems: 3
+      prefixItems:
+        - type: integer
+          format: int64
+        - type: string
+        - type: number
+          format: double
+
+    InviteWithHallNameTuple:
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - $ref: "#/components/schemas/HallInvite"
+        - type: string
+
+    SessionDetailTuple:
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - $ref: "#/components/schemas/GameSession"
+        - type: array
+          items:
+            $ref: "#/components/schemas/SessionResult"
+
+    HallStats:
+      type: object
+      required: [leaderboard, recent_sessions, points_by_game]
+      properties:
+        leaderboard:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+        recent_sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecentSession"
+        points_by_game:
+          type: array
+          items:
+            $ref: "#/components/schemas/PointsByGame"
+
+    LeaderboardEntry:
+      type: object
+      required: [user_id, name, points]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        points:
+          type: number
+          format: double
+
+    RecentSession:
+      type: object
+      required: [id, game_name, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        game_name:
+          type: string
+        session_name:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    PointsByGame:
+      type: object
+      required: [game_id, game_name, total_points]
+      properties:
+        game_id:
+          type: integer
+          format: int64
+        game_name:
+          type: string
+        total_points:
+          type: number
+          format: double
+
+    UserHistoryEntry:
+      type: object
+      required: [session_id, game_name, hall_name, points, created_at]
+      properties:
+        session_id:
+          type: integer
+          format: int64
+        game_name:
+          type: string
+        hall_name:
+          type: string
+        points:
+          type: number
+          format: double
+        created_at:
+          type: string
+          format: date-time
+
+    UserStats:
+      type: object
+      required: [total_points, halls]
+      properties:
+        total_points:
+          type: number
+          format: double
+        halls:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserHallStats"
+
+    UserHallStats:
+      type: object
+      required: [hall_id, hall_name, points]
+      properties:
+        hall_id:
+          type: integer
+          format: int64
+        hall_name:
+          type: string
+        points:
+          type: number
+          format: double

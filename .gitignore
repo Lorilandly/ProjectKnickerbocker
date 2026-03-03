@@ -1,0 +1,38 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Rust
+/target/
+**/target/
+**/*.rs.bk
+
+# SQLx / local DB artifacts
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+data/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+.next/
+coverage/
+
+# Python (if used for tooling)
+__pycache__/
+*.pyc
+
