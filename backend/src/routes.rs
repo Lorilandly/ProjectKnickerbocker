@@ -9,13 +9,10 @@ use crate::handlers::{
     auth::{google_callback, google_login, logout, me},
     games::{create_game, get_game, list_games, update_game},
     halls::{
-        assign_user, create_hall, get_hall, invite_user, leaderboard, list_halls, list_invites,
-        list_members, promote_user,
+        assign_user, create_chip_record, create_hall, get_hall, invite_user, leaderboard, list_halls,
+        list_invites, list_members, list_records, promote_user,
     },
     invites::{accept_invite, decline_invite, my_invites},
-    sessions::{
-        add_results, create_session, finalize_session, get_session, list_sessions,
-    },
     stats::{hall_stats, my_history, my_stats},
 };
 
@@ -36,13 +33,11 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
         .route("/halls/:id/invite", post(invite_user))
         .route("/halls/:id/promote", post(promote_user))
         .route("/halls/:id/invites", get(list_invites))
+        .route("/halls/:id/chip", post(create_chip_record))
+        .route("/halls/:id/records", get(list_records))
         .route("/halls/:id/games", get(list_games).post(create_game))
         .route("/halls/:id/stats", get(hall_stats))
         .route("/games/:id", get(get_game).put(update_game))
-        .route("/games/:id/sessions", get(list_sessions).post(create_session))
-        .route("/sessions/:id", get(get_session))
-        .route("/sessions/:id/results", post(add_results))
-        .route("/sessions/:id/finalize", post(finalize_session))
         .route("/invites/me", get(my_invites))
         .route("/invites/:id/accept", post(accept_invite))
         .route("/invites/:id/decline", post(decline_invite))

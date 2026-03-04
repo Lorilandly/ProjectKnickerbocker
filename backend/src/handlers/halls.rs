@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use crate::auth::{is_server_admin, require_hall_admin, require_hall_member, AppState, AuthUser};
 use crate::models::{
-    AssignUserRequest, CreateHallRequest, Hall, HallMember, HallInvite, InviteUserRequest,
+    AssignUserRequest, CreateChipRecordRequest, CreateHallRequest, Hall, HallInvite, HallMember, InviteUserRequest,
     PromoteUserRequest,
 };
 
@@ -305,4 +305,116 @@ pub async fn list_invites(
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
 
     Ok(Json(invites))
+}
+
+pub async fn create_chip_record(
+    State(state): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    Json(req): Json<CreateChipRecordRequest>,
+) -> Result<StatusCode, (StatusCode, &'static str)> {
+    let is_admin = require_hall_admin(&state.db, id, user.id)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    if !is_admin && !is_server_admin(&state, &user.email) {
+        return Err((StatusCode::FORBIDDEN, "Hall admin required"));
+    }
+
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    sqlx::query(
+        "INSERT INTO hall_chip_records (hall_id, user_id, amount, recorded_by_user_id, note)
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(req.user_id)
+    .bind(req.amount)
+    .bind(user.id)
+    .bind(&req.note)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    let affected = sqlx::query(
+        "UPDATE hall_members SET points = points + ? WHERE hall_id = ? AND user_id = ?",
+    )
+    .bind(req.amount)
+    .bind(id)
+    .bind(req.user_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?
+    .rows_affected();
+
+    if affected == 0 {
+        return Err((StatusCode::BAD_REQUEST, "Target user is not a hall member"));
+    }
+
+    tx.commit()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn list_records(
+    State(state): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<serde_json::Value>>, (StatusCode, &'static str)> {
+    let is_admin = is_server_admin(&state, &user.email);
+    let is_member = require_hall_member(&state.db, id, user.id)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    if !is_admin && !is_member {
+        return Err((StatusCode::FORBIDDEN, "Not a member of this hall"));
+    }
+
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        game_id: i64,
+        game_name: String,
+        played_at: chrono::DateTime<chrono::Utc>,
+        point_conversion_rate: f64,
+        user_id: i64,
+        user_name: String,
+        points: f64,
+    }
+
+    let rows: Vec<Row> = sqlx::query_as(
+        "SELECT g.id as game_id, g.name as game_name, g.played_at, g.point_conversion_rate,
+                gr.user_id, u.name as user_name, gr.points
+         FROM games g
+         JOIN game_results gr ON gr.game_id = g.id
+         JOIN users u ON u.id = gr.user_id
+         WHERE g.hall_id = ?
+         ORDER BY g.played_at DESC, g.id DESC",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    let payload = rows
+        .into_iter()
+        .map(|r| {
+            serde_json::json!({
+                "game_id": r.game_id,
+                "game_name": r.game_name,
+                "played_at": r.played_at,
+                "point_conversion_rate": r.point_conversion_rate,
+                "user_id": r.user_id,
+                "user_name": r.user_name,
+                "points": r.points
+            })
+        })
+        .collect();
+
+    Ok(Json(payload))
 }
