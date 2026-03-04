@@ -1,0 +1,86 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "halls": "Halls",
+    "profile": "Profile",
+    "logout": "Logout"
+  },
+  "login": {
+    "title": "Score Tracker",
+    "subtitle": "Track every point. Own every game.",
+    "signIn": "Sign in with Google",
+    "description": "Join halls, record games, and dominate the leaderboard."
+  },
+  "dashboard": {
+    "title": "Personal Dashboard",
+    "totalPoints": "Total Points",
+    "gamesPlayed": "Games Played",
+    "halls": "Halls",
+    "winRate": "Win Rate",
+    "pointsOverTime": "Points Over Time",
+    "recentActivity": "Recent Activity",
+    "pendingInvites": "Pending Invites",
+    "accept": "Accept",
+    "decline": "Decline",
+    "invitedBy": "Invited by",
+    "noActivity": "No recent activity"
+  },
+  "halls": {
+    "title": "Halls",
+    "createHall": "Create Hall",
+    "myRank": "My Rank",
+    "myPoints": "My Points",
+    "members": "Members",
+    "games": "Games",
+    "viewHall": "View Hall",
+    "noHalls": "No halls yet",
+    "role": {
+      "admin": "Admin",
+      "member": "Member"
+    }
+  },
+  "hall": {
+    "dashboard": "Dashboard",
+    "table": "Table",
+    "gamesList": "Games",
+    "members": "Members",
+    "leaderboard": "Leaderboard",
+    "pointsTrend": "Points Trend",
+    "recentGames": "Recent Games",
+    "chipInOut": "Chip In/Out",
+    "inviteUser": "Invite User",
+    "addGame": "Add Game",
+    "rank": "Rank",
+    "player": "Player",
+    "points": "Points",
+    "role": "Role"
+  },
+  "game": {
+    "name": "Game Name",
+    "description": "Description",
+    "conversionRate": "Conversion Rate",
+    "playedAt": "Played At",
+    "players": "Players",
+    "results": "Results",
+    "gain": "Gain",
+    "loss": "Loss"
+  },
+  "table": {
+    "game": "Game",
+    "date": "Date",
+    "players": "Players",
+    "results": "Results",
+    "rate": "Rate",
+    "noGames": "No games yet"
+  },
+  "common": {
+    "search": "Search",
+    "filter": "Filter",
+    "sort": "Sort",
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "points": "pts",
+    "of": "of",
+    "serverAdmin": "Server Admin"
+  }
+}

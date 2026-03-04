@@ -1,0 +1,86 @@
+{
+  "nav": {
+    "dashboard": "仪表板",
+    "halls": "大厅",
+    "profile": "个人资料",
+    "logout": "退出登录"
+  },
+  "login": {
+    "title": "积分追踪器",
+    "subtitle": "追踪每一分，掌控每场游戏。",
+    "signIn": "使用 Google 登录",
+    "description": "加入大厅，记录游戏，称霸排行榜。"
+  },
+  "dashboard": {
+    "title": "个人仪表板",
+    "totalPoints": "总积分",
+    "gamesPlayed": "参与游戏",
+    "halls": "大厅数",
+    "winRate": "胜率",
+    "pointsOverTime": "积分趋势",
+    "recentActivity": "最近动态",
+    "pendingInvites": "待处理邀请",
+    "accept": "接受",
+    "decline": "拒绝",
+    "invitedBy": "邀请人",
+    "noActivity": "暂无最近动态"
+  },
+  "halls": {
+    "title": "大厅列表",
+    "createHall": "创建大厅",
+    "myRank": "我的排名",
+    "myPoints": "我的积分",
+    "members": "成员",
+    "games": "游戏",
+    "viewHall": "查看大厅",
+    "noHalls": "暂无大厅",
+    "role": {
+      "admin": "管理员",
+      "member": "成员"
+    }
+  },
+  "hall": {
+    "dashboard": "仪表板",
+    "table": "记录表",
+    "gamesList": "游戏列表",
+    "members": "成员",
+    "leaderboard": "排行榜",
+    "pointsTrend": "积分趋势",
+    "recentGames": "最近游戏",
+    "chipInOut": "买入/卖出",
+    "inviteUser": "邀请用户",
+    "addGame": "添加游戏",
+    "rank": "排名",
+    "player": "玩家",
+    "points": "积分",
+    "role": "角色"
+  },
+  "game": {
+    "name": "游戏名称",
+    "description": "描述",
+    "conversionRate": "转换率",
+    "playedAt": "游戏时间",
+    "players": "玩家",
+    "results": "结果",
+    "gain": "赢得",
+    "loss": "输掉"
+  },
+  "table": {
+    "game": "游戏",
+    "date": "日期",
+    "players": "玩家",
+    "results": "结果",
+    "rate": "转换率",
+    "noGames": "暂无游戏记录"
+  },
+  "common": {
+    "search": "搜索",
+    "filter": "筛选",
+    "sort": "排序",
+    "loading": "加载中...",
+    "error": "出现错误",
+    "points": "分",
+    "of": "共",
+    "serverAdmin": "服务器管理员"
+  }
+}
