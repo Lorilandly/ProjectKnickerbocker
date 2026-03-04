@@ -10,4 +10,11 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    // Proxy API requests to the Rust backend in dev so the SPA and API
+    // share the same origin and CORS isn't needed.
+    proxy: {
+      '/api': 'http://localhost:8080',
+    },
+  },
 })

@@ -2,6 +2,7 @@
   "nav": {
     "dashboard": "仪表板",
     "halls": "大厅",
+    "invites": "邀请",
     "profile": "个人资料",
     "logout": "退出登录"
   },

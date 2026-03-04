@@ -2,14 +2,16 @@ import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, Trophy, Sun, Moon, Globe, Menu, X, Shield, LogOut } from 'lucide-react'
+import { LayoutDashboard, Trophy, Sun, Moon, Globe, Menu, X, Bell, LogOut } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
-import { currentUser } from '@/data/dummy'
+import { api, clearToken } from '@/api'
+import { useApi } from '@/hooks'
 import { cn } from '@/lib/cn'
 
 const NAV_ITEMS = [
   { key: 'dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { key: 'halls', href: '/halls', icon: Trophy },
+  { key: 'halls',     href: '/halls',     icon: Trophy },
+  { key: 'invites',   href: '/invites',   icon: Bell },
 ]
 
 export function Navbar() {
@@ -18,10 +20,20 @@ export function Navbar() {
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
 
+  const meState = useApi(() => api.getMe())
+  const me = meState.status === 'ok' ? meState.data : null
+
   const toggleLang = () => {
     const next = i18n.language === 'en' ? 'zh' : 'en'
     i18n.changeLanguage(next)
     localStorage.setItem('lang', next)
+  }
+
+  function handleLogout() {
+    api.logout().catch(() => null).finally(() => {
+      clearToken()
+      window.location.href = '/'
+    })
   }
 
   return (
@@ -63,13 +75,6 @@ export function Navbar() {
 
           {/* Right controls */}
           <div className="flex items-center gap-2">
-            {currentUser.is_server_admin && (
-              <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/10 text-amber-500 text-xs font-medium">
-                <Shield className="h-3 w-3" />
-                {t('common.serverAdmin')}
-              </div>
-            )}
-
             <button
               onClick={toggleLang}
               className="flex items-center gap-1 p-2 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--bg-surface-2)] transition-all text-xs font-bold"
@@ -88,16 +93,28 @@ export function Navbar() {
             </button>
 
             {/* User avatar */}
-            <div className="flex items-center gap-2 pl-2 border-l border-[var(--border)]">
-              <img
-                src={currentUser.avatar_url}
-                alt={currentUser.name}
-                className="h-8 w-8 rounded-full ring-2 ring-violet-500/20"
-              />
-              <span className="hidden lg:block text-sm font-medium text-[var(--fg)]">{currentUser.name}</span>
-            </div>
+            {me && (
+              <div className="flex items-center gap-2 pl-2 border-l border-[var(--border)]">
+                {me.avatar_url ? (
+                  <img
+                    src={me.avatar_url}
+                    alt={me.name}
+                    className="h-8 w-8 rounded-full ring-2 ring-violet-500/20"
+                  />
+                ) : (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 text-xs font-bold text-white ring-2 ring-violet-500/20">
+                    {me.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span className="hidden lg:block text-sm font-medium text-[var(--fg)]">{me.name}</span>
+              </div>
+            )}
 
-            <button className="hidden md:flex p-2 rounded-lg text-[var(--fg-muted)] hover:text-red-400 hover:bg-red-500/10 transition-all">
+            <button
+              onClick={handleLogout}
+              className="hidden md:flex p-2 rounded-lg text-[var(--fg-muted)] hover:text-red-400 hover:bg-red-500/10 transition-all"
+              title={t('nav.logout')}
+            >
               <LogOut className="h-4 w-4" />
             </button>
 
@@ -143,7 +160,10 @@ export function Navbar() {
                   </Link>
                 )
               })}
-              <button className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-all">
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-all"
+              >
                 <LogOut className="h-5 w-5" />
                 {t('nav.logout')}
               </button>
