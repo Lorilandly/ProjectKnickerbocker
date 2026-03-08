@@ -553,12 +553,15 @@ components:
     # ── Auth ──────────────────────────────────────────────────────
     AuthMeResponse:
       type: object
-      required: [id, email, name]
+      required: [id, email, name, is_server_admin]
       properties:
-        id:         { type: integer, format: int64 }
-        email:      { type: string }
-        name:       { type: string }
-        avatar_url: { type: string, nullable: true }
+        id:               { type: integer, format: int64 }
+        email:            { type: string }
+        name:             { type: string }
+        avatar_url:       { type: string, nullable: true }
+        is_server_admin:
+          type: boolean
+          description: True when the user's email is in the SERVER_ADMIN_EMAILS env var
 
     OkResponse:
       type: object

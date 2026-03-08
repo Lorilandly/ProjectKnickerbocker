@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, Trophy, Sun, Moon, Globe, Menu, X, Bell, LogOut } from 'lucide-react'
+import { LayoutDashboard, Trophy, Sun, Moon, Globe, Menu, X, Bell, LogOut, Shield } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
 import { api, clearToken } from '@/api'
 import { useApi } from '@/hooks'
@@ -91,6 +91,14 @@ export function Navbar() {
             >
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
+
+            {/* Server admin badge */}
+            {me?.is_server_admin && (
+              <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/10 text-amber-500 text-xs font-medium">
+                <Shield className="h-3 w-3" />
+                {t('common.serverAdmin')}
+              </div>
+            )}
 
             {/* User avatar */}
             {me && (

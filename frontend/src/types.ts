@@ -6,6 +6,9 @@ export type AuthMe = {
   email: string
   name: string
   avatar_url: string | null
+  // Backend needs to add this field to GET /api/auth/me response.
+  // Until then it will be undefined (falsy), which is fine — the badge just won't show.
+  is_server_admin?: boolean
 }
 
 export type Hall = {

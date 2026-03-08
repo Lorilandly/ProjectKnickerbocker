@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api, computeTrendData, groupRecordsByGame } from '@/api'
 import type {
   Game, Hall, HallMemberWithUser, HallRecordEntry,
@@ -15,15 +15,15 @@ export type AsyncState<T> =
 
 /**
  * Fires `fn` on mount and whenever `key` changes (JSON-serialized comparison).
+ * The `cancelled` flag handles React StrictMode's double-invocation: the first
+ * call's result is discarded on cleanup, and the second invocation makes a
+ * fresh call whose result is kept.
  */
 export function useApi<T>(fn: () => Promise<T>, key: unknown = null): AsyncState<T> {
   const [state, setState] = useState<AsyncState<T>>({ status: 'loading' })
-  const keyRef = useRef<string>('')
   const serialized = JSON.stringify(key)
 
   useEffect(() => {
-    if (keyRef.current === serialized) return
-    keyRef.current = serialized
     let cancelled = false
     setState({ status: 'loading' })
     fn()
@@ -34,6 +34,7 @@ export function useApi<T>(fn: () => Promise<T>, key: unknown = null): AsyncState
         }
       })
     return () => { cancelled = true }
+  // fn is a new closure each render; serialized is the correct dep.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serialized])
 

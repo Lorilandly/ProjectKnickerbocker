@@ -1,21 +1,129 @@
 import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { Search, Trophy, Users, Crown, ChevronRight } from 'lucide-react'
+import { Search, Trophy, Users, Crown, ChevronRight, Plus, X } from 'lucide-react'
 import { Layout } from '@/components/Layout'
-import { useHalls } from '@/hooks'
+import { api } from '@/api'
+import { useHalls, useApi } from '@/hooks'
 import { cn } from '@/lib/cn'
+
+function CreateHallModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!name.trim()) return
+    setLoading(true)
+    setError('')
+    try {
+      await api.createHall({ name: name.trim(), description: description.trim() || undefined })
+      onCreated()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create hall')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 16 }}
+        className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-6 shadow-2xl"
+      >
+        <div className="absolute top-0 left-0 right-0 h-px rounded-t-2xl bg-gradient-to-r from-transparent via-violet-500/50 to-transparent" />
+
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-semibold text-[var(--fg)]">Create Hall</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--bg-surface-2)] transition-all">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-[var(--fg-muted)] mb-1.5">
+              Hall Name <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Friday Night Poker"
+              autoFocus
+              className="w-full px-4 py-2.5 rounded-xl bg-[var(--bg-surface-2)] border border-[var(--border)] text-[var(--fg)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:border-violet-500/50 focus:ring-2 focus:ring-violet-500/10 transition-all text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[var(--fg-muted)] mb-1.5">
+              Description <span className="text-[var(--fg-muted)] font-normal">(optional)</span>
+            </label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Short description of the hall…"
+              rows={3}
+              className="w-full px-4 py-2.5 rounded-xl bg-[var(--bg-surface-2)] border border-[var(--border)] text-[var(--fg)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:border-violet-500/50 focus:ring-2 focus:ring-violet-500/10 transition-all text-sm resize-none"
+            />
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-400 bg-red-500/10 rounded-lg px-3 py-2">{error}</p>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2.5 rounded-xl border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--bg-surface-2)] transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!name.trim() || loading}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-violet-500/20"
+            >
+              {loading ? 'Creating…' : 'Create Hall'}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  )
+}
 
 export function HallList() {
   const { t } = useTranslation()
   const [search, setSearch] = useState('')
-  const state = useHalls()
+  const [showCreate, setShowCreate] = useState(false)
+  const hallsState = useHalls()
+  const meState = useApi(() => api.getMe())
 
-  const halls = state.status === 'ok' ? state.data : []
+  const isServerAdmin = meState.status === 'ok' && meState.data.is_server_admin
+
+  const halls = hallsState.status === 'ok' ? hallsState.data : []
   const filtered = halls.filter(h =>
     h.name.toLowerCase().includes(search.toLowerCase())
   )
+
+  function handleCreated() {
+    setShowCreate(false)
+    window.location.reload()
+  }
 
   return (
     <Layout>
@@ -29,9 +137,19 @@ export function HallList() {
           <div>
             <h1 className="text-3xl font-bold text-[var(--fg)]">{t('halls.title')}</h1>
             <p className="text-[var(--fg-muted)] mt-1">
-              {state.status === 'ok' ? `${halls.length} halls you're a member of` : t('common.loading')}
+              {hallsState.status === 'ok' ? `${halls.length} halls you're a member of` : t('common.loading')}
             </p>
           </div>
+
+          {isServerAdmin && (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-500 text-white font-medium text-sm hover:bg-violet-600 transition-all shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 active:scale-95"
+            >
+              <Plus className="h-4 w-4" />
+              {t('halls.createHall')}
+            </button>
+          )}
         </motion.div>
 
         {/* Search */}
@@ -51,8 +169,8 @@ export function HallList() {
           />
         </motion.div>
 
-        {state.status === 'error' && (
-          <p className="text-center py-8 text-red-400">{state.error.message}</p>
+        {hallsState.status === 'error' && (
+          <p className="text-center py-8 text-red-400">{hallsState.error.message}</p>
         )}
 
         {/* Hall cards */}
@@ -62,7 +180,7 @@ export function HallList() {
               key={hall.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 + i * 0.1 }}
+              transition={{ delay: 0.1 + i * 0.07 }}
             >
               <Link to={`/halls/${hall.id}`} className="block group">
                 <div className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-6 transition-all duration-300 hover:border-violet-500/40 hover:shadow-lg hover:shadow-violet-500/5">
@@ -100,7 +218,7 @@ export function HallList() {
           ))}
         </div>
 
-        {filtered.length === 0 && state.status === 'ok' && (
+        {filtered.length === 0 && hallsState.status === 'ok' && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -111,9 +229,15 @@ export function HallList() {
           </motion.div>
         )}
 
-        {/* Suppress unused import warning */}
+        {/* Suppress unused import */}
         {false && <Crown />}
       </div>
+
+      <AnimatePresence>
+        {showCreate && (
+          <CreateHallModal onClose={() => setShowCreate(false)} onCreated={handleCreated} />
+        )}
+      </AnimatePresence>
     </Layout>
   )
 }
