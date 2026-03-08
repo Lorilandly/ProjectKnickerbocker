@@ -23,6 +23,7 @@ pub struct AuthSession {
 pub struct Hall {
     pub id: i64,
     pub name: String,
+    pub description: Option<String>,
     pub created_by_user_id: i64,
     pub created_at: DateTime<Utc>,
 }
@@ -37,6 +38,18 @@ pub struct HallMember {
     pub joined_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct HallMemberWithUser {
+    pub id: i64,
+    pub hall_id: i64,
+    pub user_id: i64,
+    pub role: String,
+    pub points: f64,
+    pub joined_at: DateTime<Utc>,
+    pub user_name: String,
+    pub user_email: String,
+}
+
 #[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
 pub struct HallInvite {
     pub id: i64,
@@ -45,6 +58,17 @@ pub struct HallInvite {
     pub invited_by_user_id: i64,
     pub status: String,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InviteWithHallName {
+    pub id: i64,
+    pub hall_id: i64,
+    pub user_id: i64,
+    pub invited_by_user_id: i64,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub hall_name: String,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
@@ -78,11 +102,28 @@ pub struct HallChipRecord {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct LeaderboardEntry {
+    pub user_id: i64,
+    pub name: String,
+    pub points: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UserSearchResult {
+    pub id: i64,
+    pub name: String,
+    pub email: String,
+    pub avatar_url: Option<String>,
+}
+
 // Request/response DTOs
 
 #[derive(Debug, Deserialize)]
 pub struct CreateHallRequest {
     pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

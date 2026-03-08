@@ -7,12 +7,12 @@ use std::sync::Arc;
 
 use crate::auth::AppState;
 use crate::auth::AuthUser;
-use crate::models::HallInvite;
+use crate::models::{HallInvite, InviteWithHallName};
 
 pub async fn my_invites(
     State(state): State<Arc<AppState>>,
     AuthUser(user): AuthUser,
-) -> Result<Json<Vec<(HallInvite, String)>>, (StatusCode, &'static str)> {
+) -> Result<Json<Vec<InviteWithHallName>>, (StatusCode, &'static str)> {
     #[derive(sqlx::FromRow)]
     struct Row {
         id: i64,
@@ -35,20 +35,16 @@ pub async fn my_invites(
     .await
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
 
-    let result: Vec<(HallInvite, String)> = rows
+    let result = rows
         .into_iter()
-        .map(|r| {
-            (
-                HallInvite {
-                    id: r.id,
-                    hall_id: r.hall_id,
-                    user_id: r.user_id,
-                    invited_by_user_id: r.invited_by_user_id,
-                    status: r.status,
-                    created_at: r.created_at,
-                },
-                r.hall_name,
-            )
+        .map(|r| InviteWithHallName {
+            id: r.id,
+            hall_id: r.hall_id,
+            user_id: r.user_id,
+            invited_by_user_id: r.invited_by_user_id,
+            status: r.status,
+            created_at: r.created_at,
+            hall_name: r.hall_name,
         })
         .collect();
 

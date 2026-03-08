@@ -23,12 +23,17 @@ pub struct CallbackQuery {
     error: Option<String>,
 }
 
-pub async fn me(AuthUser(user): AuthUser) -> impl IntoResponse {
+pub async fn me(
+    State(state): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+) -> impl IntoResponse {
+    let is_server_admin = crate::auth::is_server_admin(&state, &user.email);
     Json(serde_json::json!({
         "id": user.id,
         "email": user.email,
         "name": user.name,
         "avatar_url": user.avatar_url,
+        "is_server_admin": is_server_admin,
     }))
 }
 

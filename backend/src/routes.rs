@@ -7,13 +7,14 @@ use std::sync::Arc;
 use crate::auth::{cors_layer, AppState};
 use crate::handlers::{
     auth::{google_callback, google_login, logout, me},
-    games::{create_game, get_game, list_games, update_game},
+    games::{create_game, get_game, get_game_results, list_games, update_game},
     halls::{
         assign_user, create_chip_record, create_hall, get_hall, invite_user, leaderboard, list_halls,
         list_invites, list_members, list_records, promote_user,
     },
     invites::{accept_invite, decline_invite, my_invites},
-    stats::{hall_stats, my_history, my_stats},
+    stats::{hall_stats, hall_trend, my_history, my_stats},
+    users::search_users,
 };
 
 pub fn api_routes(state: Arc<AppState>) -> Router {
@@ -37,12 +38,15 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
         .route("/halls/:id/records", get(list_records))
         .route("/halls/:id/games", get(list_games).post(create_game))
         .route("/halls/:id/stats", get(hall_stats))
+        .route("/halls/:id/trend", get(hall_trend))
         .route("/games/:id", get(get_game).put(update_game))
+        .route("/games/:id/results", get(get_game_results))
         .route("/invites/me", get(my_invites))
         .route("/invites/:id/accept", post(accept_invite))
         .route("/invites/:id/decline", post(decline_invite))
         .route("/users/me/history", get(my_history))
         .route("/users/me/stats", get(my_stats))
+        .route("/users/search", get(search_users))
         .with_state(state.clone());
 
     Router::new()

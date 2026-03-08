@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use crate::auth::{is_server_admin, require_hall_admin, require_hall_member, AppState, AuthUser};
 use crate::models::{
-    AssignUserRequest, CreateChipRecordRequest, CreateHallRequest, Hall, HallInvite, HallMember, InviteUserRequest,
-    PromoteUserRequest,
+    AssignUserRequest, CreateChipRecordRequest, CreateHallRequest, Hall, HallInvite,
+    HallMemberWithUser, InviteUserRequest, LeaderboardEntry, PromoteUserRequest,
 };
 
 pub async fn list_halls(
@@ -45,9 +45,10 @@ pub async fn create_hall(
     }
 
     let id = sqlx::query(
-        "INSERT INTO halls (name, created_by_user_id) VALUES (?, ?)",
+        "INSERT INTO halls (name, description, created_by_user_id) VALUES (?, ?, ?)",
     )
     .bind(&req.name)
+    .bind(&req.description)
     .bind(user.id)
     .execute(&state.db)
     .await
@@ -100,7 +101,7 @@ pub async fn list_members(
     State(state): State<Arc<AppState>>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
-) -> Result<Json<Vec<(HallMember, String, String)>>, (StatusCode, &'static str)> {
+) -> Result<Json<Vec<HallMemberWithUser>>, (StatusCode, &'static str)> {
     let is_admin = is_server_admin(&state, &user.email);
     let is_member = require_hall_member(&state.db, id, user.id).await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
@@ -117,12 +118,13 @@ pub async fn list_members(
         role: String,
         points: f64,
         joined_at: chrono::DateTime<chrono::Utc>,
-        name: String,
-        email: String,
+        user_name: String,
+        user_email: String,
     }
 
     let rows: Vec<Row> = sqlx::query_as(
-        "SELECT hm.id, hm.hall_id, hm.user_id, hm.role, hm.points, hm.joined_at, u.name, u.email
+        "SELECT hm.id, hm.hall_id, hm.user_id, hm.role, hm.points, hm.joined_at,
+                u.name as user_name, u.email as user_email
          FROM hall_members hm
          JOIN users u ON hm.user_id = u.id
          WHERE hm.hall_id = ?
@@ -133,21 +135,17 @@ pub async fn list_members(
     .await
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
 
-    let result: Vec<(HallMember, String, String)> = rows
+    let result = rows
         .into_iter()
-        .map(|r| {
-            (
-                HallMember {
-                    id: r.id,
-                    hall_id: r.hall_id,
-                    user_id: r.user_id,
-                    role: r.role,
-                    points: r.points,
-                    joined_at: r.joined_at,
-                },
-                r.name,
-                r.email,
-            )
+        .map(|r| HallMemberWithUser {
+            id: r.id,
+            hall_id: r.hall_id,
+            user_id: r.user_id,
+            role: r.role,
+            points: r.points,
+            joined_at: r.joined_at,
+            user_name: r.user_name,
+            user_email: r.user_email,
         })
         .collect();
 
@@ -158,7 +156,7 @@ pub async fn leaderboard(
     State(state): State<Arc<AppState>>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
-) -> Result<Json<Vec<(i64, String, f64)>>, (StatusCode, &'static str)> {
+) -> Result<Json<Vec<LeaderboardEntry>>, (StatusCode, &'static str)> {
     let is_admin = is_server_admin(&state, &user.email);
     let is_member = require_hall_member(&state.db, id, user.id).await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
@@ -186,9 +184,13 @@ pub async fn leaderboard(
     .await
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
 
-    let result: Vec<(i64, String, f64)> = rows
+    let result = rows
         .into_iter()
-        .map(|r| (r.user_id, r.name, r.points))
+        .map(|r| LeaderboardEntry {
+            user_id: r.user_id,
+            name: r.name,
+            points: r.points,
+        })
         .collect();
 
     Ok(Json(result))

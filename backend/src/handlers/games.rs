@@ -6,7 +6,7 @@ use axum::{
 use std::sync::Arc;
 
 use crate::auth::{require_hall_admin, require_hall_member, AppState, AuthUser};
-use crate::models::{CreateGameRequest, Game, UpdateGameRequest};
+use crate::models::{CreateGameRequest, Game, GameResult, UpdateGameRequest};
 
 const GAME_SELECT_COLUMNS: &str =
     "id, hall_id, name, description, point_conversion_rate, played_at, created_at";
@@ -25,7 +25,7 @@ pub async fn list_games(
     }
 
     let games: Vec<Game> = sqlx::query_as(&format!(
-        "SELECT {} FROM games WHERE hall_id = ? ORDER BY created_at",
+        "SELECT {} FROM games WHERE hall_id = ? ORDER BY played_at DESC",
         GAME_SELECT_COLUMNS
     ))
         .bind(hall_id)
@@ -135,6 +135,40 @@ pub async fn get_game(
     }
 
     Ok(Json(game))
+}
+
+pub async fn get_game_results(
+    State(state): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<GameResult>>, (StatusCode, &'static str)> {
+    let game: Game = sqlx::query_as(&format!(
+        "SELECT {} FROM games WHERE id = ?",
+        GAME_SELECT_COLUMNS
+    ))
+        .bind(id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?
+        .ok_or((StatusCode::NOT_FOUND, "Game not found"))?;
+
+    let is_admin = crate::auth::is_server_admin(&state, &user.email);
+    let is_member = require_hall_member(&state.db, game.hall_id, user.id).await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    if !is_admin && !is_member {
+        return Err((StatusCode::FORBIDDEN, "Not a member of this hall"));
+    }
+
+    let results: Vec<GameResult> = sqlx::query_as(
+        "SELECT id, game_id, user_id, points, created_at FROM game_results WHERE game_id = ?",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    Ok(Json(results))
 }
 
 pub async fn update_game(
