@@ -6,7 +6,10 @@ use axum::{
 use std::sync::Arc;
 
 use crate::auth::{require_hall_admin, require_hall_member, AppState, AuthUser};
-use crate::models::{CreateGameRequest, Game, UpdateGameRequest};
+use crate::models::{CreateGameRequest, Game, GameResult, UpdateGameRequest};
+
+const GAME_SELECT_COLUMNS: &str =
+    "id, hall_id, name, description, point_conversion_rate, played_at, created_at";
 
 pub async fn list_games(
     State(state): State<std::sync::Arc<AppState>>,
@@ -21,7 +24,10 @@ pub async fn list_games(
         return Err((StatusCode::FORBIDDEN, "Not a member of this hall"));
     }
 
-    let games: Vec<Game> = sqlx::query_as("SELECT * FROM games WHERE hall_id = ? ORDER BY created_at")
+    let games: Vec<Game> = sqlx::query_as(&format!(
+        "SELECT {} FROM games WHERE hall_id = ? ORDER BY played_at DESC",
+        GAME_SELECT_COLUMNS
+    ))
         .bind(hall_id)
         .fetch_all(&state.db)
         .await
@@ -43,21 +49,60 @@ pub async fn create_game(
         return Err((StatusCode::FORBIDDEN, "Hall admin required"));
     }
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    let played_at = req.played_at.unwrap_or_else(chrono::Utc::now);
     let id = sqlx::query(
-        "INSERT INTO games (hall_id, name, description, point_conversion_rate, expected_sum_rule)
+        "INSERT INTO games (hall_id, name, description, point_conversion_rate, played_at)
          VALUES (?, ?, ?, ?, ?)",
     )
     .bind(hall_id)
     .bind(&req.name)
     .bind(&req.description)
     .bind(req.point_conversion_rate)
-    .bind(&req.expected_sum_rule)
-    .execute(&state.db)
+    .bind(played_at)
+    .execute(&mut *tx)
     .await
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?
     .last_insert_rowid();
 
-    let game: Game = sqlx::query_as("SELECT * FROM games WHERE id = ?")
+    for result in &req.results {
+        sqlx::query("INSERT INTO game_results (game_id, user_id, points) VALUES (?, ?, ?)")
+            .bind(id)
+            .bind(result.user_id)
+            .bind(result.points)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+        let affected = sqlx::query(
+            "UPDATE hall_members SET points = points + ? WHERE hall_id = ? AND user_id = ?",
+        )
+        .bind(result.points * req.point_conversion_rate)
+        .bind(hall_id)
+        .bind(result.user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?
+        .rows_affected();
+
+        if affected == 0 {
+            return Err((StatusCode::BAD_REQUEST, "Game result contains non-member user"));
+        }
+    }
+
+    tx.commit()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    let game: Game = sqlx::query_as(&format!(
+        "SELECT {} FROM games WHERE id = ?",
+        GAME_SELECT_COLUMNS
+    ))
         .bind(id)
         .fetch_one(&state.db)
         .await
@@ -71,7 +116,10 @@ pub async fn get_game(
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
 ) -> Result<Json<Game>, (StatusCode, &'static str)> {
-    let game: Game = sqlx::query_as("SELECT * FROM games WHERE id = ?")
+    let game: Game = sqlx::query_as(&format!(
+        "SELECT {} FROM games WHERE id = ?",
+        GAME_SELECT_COLUMNS
+    ))
         .bind(id)
         .fetch_optional(&state.db)
         .await
@@ -89,13 +137,50 @@ pub async fn get_game(
     Ok(Json(game))
 }
 
+pub async fn get_game_results(
+    State(state): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<GameResult>>, (StatusCode, &'static str)> {
+    let game: Game = sqlx::query_as(&format!(
+        "SELECT {} FROM games WHERE id = ?",
+        GAME_SELECT_COLUMNS
+    ))
+        .bind(id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?
+        .ok_or((StatusCode::NOT_FOUND, "Game not found"))?;
+
+    let is_admin = crate::auth::is_server_admin(&state, &user.email);
+    let is_member = require_hall_member(&state.db, game.hall_id, user.id).await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    if !is_admin && !is_member {
+        return Err((StatusCode::FORBIDDEN, "Not a member of this hall"));
+    }
+
+    let results: Vec<GameResult> = sqlx::query_as(
+        "SELECT id, game_id, user_id, points, created_at FROM game_results WHERE game_id = ?",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    Ok(Json(results))
+}
+
 pub async fn update_game(
     State(state): State<Arc<AppState>>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
     Json(req): Json<UpdateGameRequest>,
 ) -> Result<Json<Game>, (StatusCode, &'static str)> {
-    let game: Game = sqlx::query_as("SELECT * FROM games WHERE id = ?")
+    let game: Game = sqlx::query_as(&format!(
+        "SELECT {} FROM games WHERE id = ?",
+        GAME_SELECT_COLUMNS
+    ))
         .bind(id)
         .fetch_optional(&state.db)
         .await
@@ -133,16 +218,19 @@ pub async fn update_game(
             .await
             .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
     }
-    if req.expected_sum_rule.is_some() {
-        sqlx::query("UPDATE games SET expected_sum_rule = ? WHERE id = ?")
-            .bind(&req.expected_sum_rule)
+    if let Some(played_at) = req.played_at {
+        sqlx::query("UPDATE games SET played_at = ? WHERE id = ?")
+            .bind(played_at)
             .bind(id)
             .execute(&state.db)
             .await
             .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
     }
 
-    let game: Game = sqlx::query_as("SELECT * FROM games WHERE id = ?")
+    let game: Game = sqlx::query_as(&format!(
+        "SELECT {} FROM games WHERE id = ?",
+        GAME_SELECT_COLUMNS
+    ))
         .bind(id)
         .fetch_one(&state.db)
         .await

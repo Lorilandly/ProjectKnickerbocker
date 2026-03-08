@@ -23,6 +23,7 @@ pub struct AuthSession {
 pub struct Hall {
     pub id: i64,
     pub name: String,
+    pub description: Option<String>,
     pub created_by_user_id: i64,
     pub created_at: DateTime<Utc>,
 }
@@ -37,6 +38,18 @@ pub struct HallMember {
     pub joined_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct HallMemberWithUser {
+    pub id: i64,
+    pub hall_id: i64,
+    pub user_id: i64,
+    pub role: String,
+    pub points: f64,
+    pub joined_at: DateTime<Utc>,
+    pub user_name: String,
+    pub user_email: String,
+}
+
 #[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
 pub struct HallInvite {
     pub id: i64,
@@ -47,6 +60,17 @@ pub struct HallInvite {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct InviteWithHallName {
+    pub id: i64,
+    pub hall_id: i64,
+    pub user_id: i64,
+    pub invited_by_user_id: i64,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub hall_name: String,
+}
+
 #[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
 pub struct Game {
     pub id: i64,
@@ -54,26 +78,43 @@ pub struct Game {
     pub name: String,
     pub description: Option<String>,
     pub point_conversion_rate: f64,
-    pub expected_sum_rule: Option<String>,
+    pub played_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
-pub struct GameSession {
+pub struct GameResult {
     pub id: i64,
     pub game_id: i64,
-    pub name: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub finalized_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
-pub struct SessionResult {
-    pub id: i64,
-    pub session_id: i64,
     pub user_id: i64,
     pub points: f64,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
+pub struct HallChipRecord {
+    pub id: i64,
+    pub hall_id: i64,
+    pub user_id: i64,
+    pub amount: f64,
+    pub recorded_by_user_id: i64,
+    pub note: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LeaderboardEntry {
+    pub user_id: i64,
+    pub name: String,
+    pub points: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UserSearchResult {
+    pub id: i64,
+    pub name: String,
+    pub email: String,
+    pub avatar_url: Option<String>,
 }
 
 // Request/response DTOs
@@ -81,6 +122,8 @@ pub struct SessionResult {
 #[derive(Debug, Deserialize)]
 pub struct CreateHallRequest {
     pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -105,7 +148,8 @@ pub struct CreateGameRequest {
     pub description: Option<String>,
     #[serde(default = "default_conversion_rate")]
     pub point_conversion_rate: f64,
-    pub expected_sum_rule: Option<String>,
+    pub played_at: Option<DateTime<Utc>>,
+    pub results: Vec<GameResultEntry>,
 }
 
 fn default_conversion_rate() -> f64 {
@@ -117,21 +161,18 @@ pub struct UpdateGameRequest {
     pub name: Option<String>,
     pub description: Option<String>,
     pub point_conversion_rate: Option<f64>,
-    pub expected_sum_rule: Option<String>,
+    pub played_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CreateSessionRequest {
-    pub name: Option<String>,
+pub struct CreateChipRecordRequest {
+    pub user_id: i64,
+    pub amount: f64,
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct SessionResultsRequest {
-    pub results: Vec<SessionResultEntry>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SessionResultEntry {
+pub struct GameResultEntry {
     pub user_id: i64,
     pub points: f64,
 }

@@ -4,30 +4,24 @@ use axum::{
     Json,
 };
 use serde::Serialize;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::auth::{is_server_admin, require_hall_member, AppState, AuthUser};
+use crate::models::LeaderboardEntry;
 
 #[derive(Serialize)]
 pub struct HallStats {
     pub leaderboard: Vec<LeaderboardEntry>,
-    pub recent_sessions: Vec<RecentSession>,
+    pub recent_games: Vec<RecentGame>,
     pub points_by_game: Vec<PointsByGame>,
 }
 
 #[derive(Serialize)]
-pub struct LeaderboardEntry {
-    pub user_id: i64,
-    pub name: String,
-    pub points: f64,
-}
-
-#[derive(Serialize)]
-pub struct RecentSession {
+pub struct RecentGame {
     pub id: i64,
     pub game_name: String,
-    pub session_name: Option<String>,
-    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub played_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Serialize)]
@@ -38,11 +32,21 @@ pub struct PointsByGame {
 }
 
 #[derive(Serialize)]
-pub struct UserHistoryEntry {
-    pub session_id: i64,
+pub struct HallTrendEntry {
+    pub game_id: i64,
     pub game_name: String,
+    pub played_at: chrono::DateTime<chrono::Utc>,
+    pub cumulative: HashMap<String, f64>,
+}
+
+#[derive(Serialize)]
+pub struct UserHistoryEntry {
+    pub entry_type: String,
+    pub ref_id: i64,
+    pub game_name: Option<String>,
     pub hall_name: String,
     pub points: f64,
+    pub note: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -99,19 +103,17 @@ pub async fn hall_stats(
     .collect();
 
     #[derive(sqlx::FromRow)]
-    struct SessionRow {
+    struct GameRowSimple {
         id: i64,
         game_name: String,
-        session_name: Option<String>,
-        created_at: chrono::DateTime<chrono::Utc>,
+        played_at: chrono::DateTime<chrono::Utc>,
     }
 
-    let recent_sessions: Vec<RecentSession> = sqlx::query_as(
-        "SELECT gs.id, g.name as game_name, gs.name as session_name, gs.finalized_at as created_at
-         FROM game_sessions gs
-         JOIN games g ON gs.game_id = g.id
-         WHERE g.hall_id = ? AND gs.finalized_at IS NOT NULL
-         ORDER BY gs.finalized_at DESC
+    let recent_games: Vec<RecentGame> = sqlx::query_as(
+        "SELECT g.id, g.name as game_name, g.played_at
+         FROM games g
+         WHERE g.hall_id = ?
+         ORDER BY g.played_at DESC
          LIMIT 10",
     )
     .bind(id)
@@ -119,11 +121,10 @@ pub async fn hall_stats(
     .await
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?
     .into_iter()
-    .map(|r: SessionRow| RecentSession {
+    .map(|r: GameRowSimple| RecentGame {
         id: r.id,
         game_name: r.game_name,
-        session_name: r.session_name,
-        created_at: r.created_at,
+        played_at: r.played_at,
     })
     .collect();
 
@@ -136,10 +137,9 @@ pub async fn hall_stats(
 
     let points_by_game: Vec<PointsByGame> = sqlx::query_as(
         "SELECT g.id as game_id, g.name as game_name,
-                COALESCE(SUM(sr.points * g.point_conversion_rate), 0) as total_points
+                COALESCE(SUM(gr.points * g.point_conversion_rate), 0) as total_points
          FROM games g
-         LEFT JOIN game_sessions gs ON gs.game_id = g.id AND gs.finalized_at IS NOT NULL
-         LEFT JOIN session_results sr ON sr.session_id = gs.id
+         LEFT JOIN game_results gr ON gr.game_id = g.id
          WHERE g.hall_id = ?
          GROUP BY g.id",
     )
@@ -157,9 +157,95 @@ pub async fn hall_stats(
 
     Ok(Json(HallStats {
         leaderboard,
-        recent_sessions,
+        recent_games,
         points_by_game,
     }))
+}
+
+pub async fn hall_trend(
+    State(state): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<HallTrendEntry>>, (StatusCode, &'static str)> {
+    let is_admin = is_server_admin(&state, &user.email);
+    let is_member = require_hall_member(&state.db, id, user.id).await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    if !is_admin && !is_member {
+        return Err((StatusCode::FORBIDDEN, "Not a member of this hall"));
+    }
+
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        game_id: i64,
+        game_name: String,
+        played_at: chrono::DateTime<chrono::Utc>,
+        user_name: String,
+        hall_points: f64,
+    }
+
+    // Fetch all game results for this hall, ordered chronologically.
+    // hall_points = game points × conversion rate.
+    let rows: Vec<Row> = sqlx::query_as(
+        "SELECT g.id as game_id, g.name as game_name, g.played_at,
+                u.name as user_name, gr.points * g.point_conversion_rate as hall_points
+         FROM games g
+         JOIN game_results gr ON gr.game_id = g.id
+         JOIN users u ON u.id = gr.user_id
+         WHERE g.hall_id = ?
+         ORDER BY g.played_at ASC, g.id ASC",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    // Group by game, accumulating per-user totals across games in order.
+    let mut cumulative: HashMap<String, f64> = HashMap::new();
+    let mut entries: Vec<HallTrendEntry> = Vec::new();
+
+    // Use a vec to maintain game order and detect game boundaries.
+    let mut current_game_id: Option<i64> = None;
+    let mut current_game_name = String::new();
+    let mut current_played_at = chrono::DateTime::<chrono::Utc>::MIN_UTC;
+    let mut current_deltas: HashMap<String, f64> = HashMap::new();
+
+    for row in rows {
+        if current_game_id != Some(row.game_id) {
+            // Flush previous game.
+            if let Some(gid) = current_game_id {
+                for (name, delta) in &current_deltas {
+                    *cumulative.entry(name.clone()).or_insert(0.0) += delta;
+                }
+                entries.push(HallTrendEntry {
+                    game_id: gid,
+                    game_name: current_game_name.clone(),
+                    played_at: current_played_at,
+                    cumulative: cumulative.clone(),
+                });
+                current_deltas.clear();
+            }
+            current_game_id = Some(row.game_id);
+            current_game_name = row.game_name;
+            current_played_at = row.played_at;
+        }
+        current_deltas.insert(row.user_name, row.hall_points);
+    }
+
+    // Flush the last game.
+    if let Some(gid) = current_game_id {
+        for (name, delta) in &current_deltas {
+            *cumulative.entry(name.clone()).or_insert(0.0) += delta;
+        }
+        entries.push(HallTrendEntry {
+            game_id: gid,
+            game_name: current_game_name,
+            played_at: current_played_at,
+            cumulative: cumulative.clone(),
+        });
+    }
+
+    Ok(Json(entries))
 }
 
 pub async fn my_history(
@@ -168,23 +254,32 @@ pub async fn my_history(
 ) -> Result<Json<Vec<UserHistoryEntry>>, (StatusCode, &'static str)> {
     #[derive(sqlx::FromRow)]
     struct Row {
-        session_id: i64,
-        game_name: String,
+        entry_type: String,
+        ref_id: i64,
+        game_name: Option<String>,
         hall_name: String,
         points: f64,
+        note: Option<String>,
         created_at: chrono::DateTime<chrono::Utc>,
     }
 
     let rows: Vec<Row> = sqlx::query_as(
-        "SELECT gs.id as session_id, g.name as game_name, h.name as hall_name, sr.points, gs.finalized_at as created_at
-         FROM session_results sr
-         JOIN game_sessions gs ON sr.session_id = gs.id
-         JOIN games g ON gs.game_id = g.id
-         JOIN halls h ON g.hall_id = h.id
-         WHERE sr.user_id = ? AND gs.finalized_at IS NOT NULL
-         ORDER BY gs.finalized_at DESC
+        "SELECT 'game' as entry_type, g.id as ref_id, g.name as game_name, h.name as hall_name,
+                gr.points * g.point_conversion_rate as points, NULL as note, g.played_at as created_at
+         FROM game_results gr
+         JOIN games g ON g.id = gr.game_id
+         JOIN halls h ON h.id = g.hall_id
+         WHERE gr.user_id = ?
+         UNION ALL
+         SELECT 'chip' as entry_type, cr.id as ref_id, NULL as game_name, h.name as hall_name,
+                cr.amount as points, cr.note as note, cr.created_at as created_at
+         FROM hall_chip_records cr
+         JOIN halls h ON h.id = cr.hall_id
+         WHERE cr.user_id = ?
+         ORDER BY created_at DESC
          LIMIT 50",
     )
+    .bind(user.id)
     .bind(user.id)
     .fetch_all(&state.db)
     .await
@@ -193,10 +288,12 @@ pub async fn my_history(
     let result: Vec<UserHistoryEntry> = rows
         .into_iter()
         .map(|r| UserHistoryEntry {
-            session_id: r.session_id,
+            entry_type: r.entry_type,
+            ref_id: r.ref_id,
             game_name: r.game_name,
             hall_name: r.hall_name,
             points: r.points,
+            note: r.note,
             created_at: r.created_at,
         })
         .collect();
