@@ -117,6 +117,13 @@ export type PointsByGame = {
   total_points: number
 }
 
+export type UserSearchResult = {
+  id: number
+  name: string
+  email: string
+  avatar_url: string | null
+}
+
 export type CreateGameRequest = {
   name: string
   description?: string

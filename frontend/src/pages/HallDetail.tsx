@@ -1,19 +1,19 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import {
   LayoutDashboard, Table2, Gamepad2, UserPlus, Plus, ChevronLeft,
-  Crown, ArrowUpDown, ArrowUp, ArrowDown, Search, Coins, Trophy,
+  Crown, ArrowUpDown, ArrowUp, ArrowDown, Search, Coins, Trophy, X, Check, Loader2,
 } from 'lucide-react'
 import { Layout } from '@/components/Layout'
 import { LeaderboardChart } from '@/components/LeaderboardChart'
 import { PointsTrendChart } from '@/components/PointsTrendChart'
 import { Spotlight } from '@/components/ui/spotlight'
 import { useHall, useHallStats, useHallMembers, useHallRecords, useHallGames, useTrendData } from '@/hooks'
-import { groupRecordsByGame } from '@/api'
+import { api, groupRecordsByGame } from '@/api'
 import { cn } from '@/lib/cn'
-import type { HallRecordEntry } from '@/types'
+import type { HallRecordEntry, UserSearchResult } from '@/types'
 
 type Tab = 'dashboard' | 'table' | 'games' | 'members'
 
@@ -38,6 +38,134 @@ function formatTime(dateStr: string) {
 
 function Loading() {
   return <p className="py-8 text-center text-sm text-[var(--fg-muted)]">Loading…</p>
+}
+
+// ─── Invite Modal ─────────────────────────────────────────────────────────────
+
+function InviteModal({ hallId, onClose }: { hallId: number; onClose: () => void }) {
+  const [query, setQuery]           = useState('')
+  const [results, setResults]       = useState<UserSearchResult[]>([])
+  const [searching, setSearching]   = useState(false)
+  const [invited, setInvited]       = useState<Set<number>>(new Set())
+  const [inviting, setInviting]     = useState<number | null>(null)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { inputRef.current?.focus() }, [])
+
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault()
+    if (!query.trim()) return
+    setSearching(true)
+    setResults([])
+    try {
+      const data = await api.searchUsers(query.trim())
+      setResults(data)
+    } catch {
+      setResults([])
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  async function handleInvite(userId: number) {
+    setInviting(userId)
+    setInviteError(null)
+    try {
+      await api.inviteUser(hallId, userId)
+      setInvited(prev => new Set(prev).add(userId))
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : 'Failed to send invite.')
+    } finally {
+      setInviting(null)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        transition={{ duration: 0.15 }}
+        className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-2xl overflow-hidden"
+      >
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/40 to-transparent" />
+
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border)]">
+          <div className="flex items-center gap-2">
+            <UserPlus className="h-5 w-5 text-violet-400" />
+            <h2 className="font-semibold text-[var(--fg)]">Invite User</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--bg-surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <form onSubmit={handleSearch} className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--fg-muted)]" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search by name or email…"
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[var(--bg-surface-2)] border border-[var(--border)] text-sm text-[var(--fg)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:border-violet-500/50 transition-all"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={searching || !query.trim()}
+              className="px-4 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
+            </button>
+          </form>
+
+          {inviteError && (
+            <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5">{inviteError}</p>
+          )}
+
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {results.length === 0 && !searching && query && (
+              <p className="text-sm text-center text-[var(--fg-muted)] py-6">No users found.</p>
+            )}
+            {results.map(user => {
+              const isInvited = invited.has(user.id)
+              const isInviting = inviting === user.id
+              return (
+                <div key={user.id} className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-surface-2)] border border-[var(--border)]">
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500/30 to-cyan-500/30 text-sm font-bold text-[var(--fg)]">
+                    {user.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm text-[var(--fg)] truncate">{user.name}</p>
+                    <p className="text-xs text-[var(--fg-muted)] truncate">{user.email}</p>
+                  </div>
+                  <button
+                    onClick={() => handleInvite(user.id)}
+                    disabled={isInvited || isInviting}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0',
+                      isInvited
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-default'
+                        : 'bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 disabled:opacity-50'
+                    )}
+                  >
+                    {isInviting ? <Loader2 className="h-3 w-3 animate-spin" /> : isInvited ? <Check className="h-3 w-3" /> : <UserPlus className="h-3 w-3" />}
+                    {isInvited ? 'Invited' : 'Invite'}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  )
 }
 
 // ─── Dashboard Tab ────────────────────────────────────────────────────────────
@@ -267,7 +395,7 @@ function GamesTab({ hallId }: { hallId: number }) {
       <div className="flex items-center justify-between">
         <p className="text-sm text-[var(--fg-muted)]">{allGames.length} games total</p>
         <Link
-          to="/games/new"
+          to={`/halls/${hallId}/games/new`}
           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-all shadow-lg shadow-violet-500/20"
         >
           <Plus className="h-4 w-4" />
@@ -407,7 +535,8 @@ function MembersTab({ hallId }: { hallId: number }) {
 export function HallDetail() {
   const { id } = useParams<{ id: string }>()
   const { t } = useTranslation()
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard')
+  const [activeTab, setActiveTab]   = useState<Tab>('dashboard')
+  const [inviteOpen, setInviteOpen] = useState(false)
 
   const hallId = Number(id)
   const hallState   = useHall(hallId)
@@ -422,6 +551,9 @@ export function HallDetail() {
 
   return (
     <Layout>
+      <AnimatePresence>
+        {inviteOpen && <InviteModal hallId={hallId} onClose={() => setInviteOpen(false)} />}
+      </AnimatePresence>
       <div className="space-y-6">
         {/* Breadcrumb + header */}
         <div>
@@ -457,8 +589,15 @@ export function HallDetail() {
                     <Coins className="h-4 w-4" />
                     {t('hall.chipInOut')}
                   </button>
+                  <button
+                    onClick={() => setInviteOpen(true)}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-surface-2)] border border-[var(--border)] text-[var(--fg-muted)] hover:text-[var(--fg)] text-sm font-medium transition-all"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    {t('hall.inviteUser')}
+                  </button>
                   <Link
-                    to="/games/new"
+                    to={`/halls/${hallId}/games/new`}
                     className="flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-all shadow-lg shadow-violet-500/20"
                   >
                     <Plus className="h-4 w-4" />

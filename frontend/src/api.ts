@@ -2,6 +2,7 @@ import type {
   AuthMe, CreateGameRequest, Game, Hall, HallInvite,
   HallMember, HallMemberWithUser, HallRecordEntry, HallStats,
   InviteWithHall, LeaderboardEntry, UserHistoryEntry, UserStats,
+  UserSearchResult,
 } from '@/types'
 
 // ── Token storage ─────────────────────────────────────────────────────────────
@@ -76,16 +77,22 @@ export const api = {
   createHall: (body: { name: string; description?: string }) =>
     request<Hall>('/api/halls', { method: 'POST', ...json(body) }),
 
-  // Members – backend returns [[HallMember, name, email], ...]
+  // Members – backend returns flat objects {id,hall_id,user_id,role,points,joined_at,user_name,user_email}
   listMembers: async (hallId: number): Promise<HallMemberWithUser[]> => {
-    const raw = await request<[HallMember, string, string][]>(`/api/halls/${hallId}/members`)
-    return raw.map(([member, name, email]) => ({ member, name, email }))
+    const raw = await request<{
+      id: number; hall_id: number; user_id: number; role: string;
+      points: number; joined_at: string; user_name: string; user_email: string;
+    }[]>(`/api/halls/${hallId}/members`)
+    return raw.map(r => ({
+      member: { id: r.id, hall_id: r.hall_id, user_id: r.user_id, role: r.role as 'admin' | 'member', points: r.points, joined_at: r.joined_at },
+      name: r.user_name,
+      email: r.user_email,
+    }))
   },
 
-  // Leaderboard – backend returns [[user_id, name, points], ...]
+  // Leaderboard – backend returns flat objects {user_id,name,points}
   leaderboard: async (hallId: number): Promise<LeaderboardEntry[]> => {
-    const raw = await request<[number, string, number][]>(`/api/halls/${hallId}/leaderboard`)
-    return raw.map(([user_id, name, points]) => ({ user_id, name, points }))
+    return request<LeaderboardEntry[]>(`/api/halls/${hallId}/leaderboard`)
   },
 
   hallStats: (hallId: number) => request<HallStats>(`/api/halls/${hallId}/stats`),
@@ -116,15 +123,25 @@ export const api = {
     body: Partial<Pick<Game, 'name' | 'description' | 'point_conversion_rate' | 'played_at'>>,
   ) => request<Game>(`/api/games/${id}`, { method: 'PUT', ...json(body) }),
 
-  // Invites – backend returns [[HallInvite, hall_name], ...]
+  // Invites – backend returns flat objects {id,hall_id,user_id,invited_by_user_id,status,created_at,hall_name}
   myInvites: async (): Promise<InviteWithHall[]> => {
-    const raw = await request<[HallInvite, string][]>('/api/invites/me')
-    return raw.map(([invite, hallName]) => ({ invite, hallName }))
+    const raw = await request<{
+      id: number; hall_id: number; user_id: number; invited_by_user_id: number;
+      status: string; created_at: string; hall_name: string;
+    }[]>('/api/invites/me')
+    return raw.map(r => ({
+      invite: { id: r.id, hall_id: r.hall_id, user_id: r.user_id, invited_by_user_id: r.invited_by_user_id, status: r.status as 'pending' | 'accepted' | 'declined', created_at: r.created_at },
+      hallName: r.hall_name,
+    }))
   },
   acceptInvite: (id: number) =>
     request<void>(`/api/invites/${id}/accept`, { method: 'POST' }),
   declineInvite: (id: number) =>
     request<void>(`/api/invites/${id}/decline`, { method: 'POST' }),
+
+  // Users
+  searchUsers: (q: string): Promise<UserSearchResult[]> =>
+    request<UserSearchResult[]>(`/api/users/search?q=${encodeURIComponent(q)}`),
 
   // Stats
   myHistory: () => request<UserHistoryEntry[]>('/api/users/me/history'),

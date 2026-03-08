@@ -7,6 +7,7 @@ import { PersonalDashboard } from '@/pages/PersonalDashboard'
 import { HallList } from '@/pages/HallList'
 import { HallDetail } from '@/pages/HallDetail'
 import { GameDetail } from '@/pages/GameDetail'
+import { CreateGame } from '@/pages/CreateGame'
 import { InvitesPage } from '@/pages/InvitesPage'
 
 // Run once at module load — before any React component renders.
@@ -31,6 +32,7 @@ function AuthGate() {
       <Route path="/dashboard"                   element={<PersonalDashboard />} />
       <Route path="/halls"                       element={<HallList />} />
       <Route path="/halls/:id"                   element={<HallDetail />} />
+      <Route path="/halls/:hallId/games/new"      element={<CreateGame />} />
       <Route path="/halls/:hallId/games/:gameId" element={<GameDetail />} />
       <Route path="/invites"                     element={<InvitesPage />} />
       <Route path="*"                            element={<Navigate to="/dashboard" replace />} />
