@@ -1,6 +1,6 @@
 import type {
   AuthMe, CreateGameRequest, Game, Hall, HallInvite,
-  HallMember, HallMemberWithUser, HallRecordEntry, HallStats,
+  HallMemberWithUser, HallRecordEntry, HallStats,
   InviteWithHall, LeaderboardEntry, UserHistoryEntry, UserStats,
   UserSearchResult,
 } from '@/types'

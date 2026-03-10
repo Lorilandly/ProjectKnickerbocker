@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { Search, Trophy, Users, Crown, ChevronRight, Plus, X } from 'lucide-react'
+import { Search, Trophy, Users, ChevronRight, Plus, X } from 'lucide-react'
 import { Layout } from '@/components/Layout'
 import { api } from '@/api'
 import { useHalls, useApi } from '@/hooks'
@@ -229,8 +229,6 @@ export function HallList() {
           </motion.div>
         )}
 
-        {/* Suppress unused import */}
-        {false && <Crown />}
       </div>
 
       <AnimatePresence>
