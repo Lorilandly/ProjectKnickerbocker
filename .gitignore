@@ -23,7 +23,7 @@ logs/
 *.db-journal
 *.sqlite
 *.sqlite3
-data/
+data/*
 
 # Node / frontend
 node_modules/
