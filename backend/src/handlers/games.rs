@@ -171,6 +171,70 @@ pub async fn get_game_results(
     Ok(Json(results))
 }
 
+pub async fn delete_game(
+    State(state): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, (StatusCode, &'static str)> {
+    let game: Game = sqlx::query_as(&format!(
+        "SELECT {} FROM games WHERE id = ?",
+        GAME_SELECT_COLUMNS
+    ))
+    .bind(id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?
+    .ok_or((StatusCode::NOT_FOUND, "Game not found"))?;
+
+    let is_admin = require_hall_admin(&state.db, game.hall_id, user.id).await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    if !is_admin && !crate::auth::is_server_admin(&state, &user.email) {
+        return Err((StatusCode::FORBIDDEN, "Hall admin required"));
+    }
+
+    let mut tx = state.db.begin().await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    // Reverse each player's hall points before deleting.
+    let results: Vec<GameResult> = sqlx::query_as(
+        "SELECT id, game_id, user_id, points, created_at FROM game_results WHERE game_id = ?",
+    )
+    .bind(id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    for result in &results {
+        sqlx::query(
+            "UPDATE hall_members SET points = points - ? WHERE hall_id = ? AND user_id = ?",
+        )
+        .bind(result.points * game.point_conversion_rate)
+        .bind(game.hall_id)
+        .bind(result.user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+    }
+
+    sqlx::query("DELETE FROM game_results WHERE game_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    sqlx::query("DELETE FROM games WHERE id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    tx.commit().await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn update_game(
     State(state): State<Arc<AppState>>,
     AuthUser(user): AuthUser,

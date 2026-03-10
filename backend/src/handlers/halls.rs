@@ -286,6 +286,33 @@ pub async fn promote_user(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn demote_user(
+    State(state): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    Json(req): Json<PromoteUserRequest>,
+) -> Result<StatusCode, (StatusCode, &'static str)> {
+    let is_admin = require_hall_admin(&state.db, id, user.id).await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    if !is_admin && !is_server_admin(&state, &user.email) {
+        return Err((StatusCode::FORBIDDEN, "Hall admin required"));
+    }
+
+    let result = sqlx::query("UPDATE hall_members SET role = 'member' WHERE hall_id = ? AND user_id = ?")
+        .bind(id)
+        .bind(req.user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    if result.rows_affected() == 0 {
+        return Err((StatusCode::NOT_FOUND, "User is not a hall member"));
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn list_invites(
     State(state): State<Arc<AppState>>,
     AuthUser(user): AuthUser,

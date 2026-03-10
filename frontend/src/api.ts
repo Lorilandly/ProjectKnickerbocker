@@ -108,6 +108,8 @@ export const api = {
     request<void>(`/api/halls/${hallId}/invite`, { method: 'POST', ...json({ user_id: userId }) }),
   promoteUser: (hallId: number, userId: number) =>
     request<void>(`/api/halls/${hallId}/promote`, { method: 'POST', ...json({ user_id: userId }) }),
+  demoteUser: (hallId: number, userId: number) =>
+    request<void>(`/api/halls/${hallId}/demote`, { method: 'POST', ...json({ user_id: userId }) }),
   listHallInvites: (hallId: number) =>
     request<HallInvite[]>(`/api/halls/${hallId}/invites`),
   chip: (hallId: number, body: { user_id: number; amount: number; note?: string }) =>
@@ -122,6 +124,8 @@ export const api = {
     id: number,
     body: Partial<Pick<Game, 'name' | 'description' | 'point_conversion_rate' | 'played_at'>>,
   ) => request<Game>(`/api/games/${id}`, { method: 'PUT', ...json(body) }),
+  deleteGame: (id: number) =>
+    request<void>(`/api/games/${id}`, { method: 'DELETE' }),
 
   // Invites – backend returns flat objects {id,hall_id,user_id,invited_by_user_id,status,created_at,hall_name}
   myInvites: async (): Promise<InviteWithHall[]> => {

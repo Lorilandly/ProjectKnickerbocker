@@ -1,15 +1,17 @@
-import { useParams, Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { useState } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import {
-  ChevronLeft, Calendar, Users, Zap, Trophy,
+  ChevronLeft, Calendar, Users, Zap, Trophy, Trash2, Loader2, X,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts'
 import { Layout } from '@/components/Layout'
-import { useGame, useGameResults } from '@/hooks'
+import { useGame, useGameResults, useMe, useHallMembers } from '@/hooks'
+import { api } from '@/api'
 import { useTheme } from '@/contexts/ThemeContext'
 import { cn } from '@/lib/cn'
 
@@ -27,9 +29,35 @@ export function GameDetail() {
   const { hallId, gameId } = useParams<{ hallId: string; gameId: string }>()
   const { t } = useTranslation()
   const { theme } = useTheme()
+  const navigate = useNavigate()
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting]           = useState(false)
+  const [deleteError, setDeleteError]     = useState<string | null>(null)
 
   const gameState    = useGame(Number(gameId))
   const resultsState = useGameResults(Number(hallId), Number(gameId))
+  const meState      = useMe()
+  const membersState = useHallMembers(Number(hallId))
+
+  const currentUserId = meState.status === 'ok' ? meState.data.id : null
+  const isServerAdmin = meState.status === 'ok' && !!meState.data.is_server_admin
+  const isHallAdmin   = membersState.status === 'ok'
+    && membersState.data.some(m => m.member.user_id === currentUserId && m.member.role === 'admin')
+  const canDelete = isServerAdmin || isHallAdmin
+
+  async function handleDelete() {
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await api.deleteGame(Number(gameId))
+      navigate(`/halls/${hallId}?tab=games`)
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete game.')
+      setConfirmDelete(false)
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const game    = gameState.status === 'ok' ? gameState.data : null
   const results = resultsState.status === 'ok'
@@ -70,6 +98,55 @@ export function GameDetail() {
 
   return (
     <Layout>
+      {/* Delete confirmation modal */}
+      <AnimatePresence>
+        {confirmDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setConfirmDelete(false)} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.15 }}
+              className="relative w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-6 shadow-2xl"
+            >
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500/40 to-transparent" />
+              <button onClick={() => setConfirmDelete(false)} className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-[var(--bg-surface-2)] text-[var(--fg-muted)] transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="h-10 w-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center flex-shrink-0">
+                  <Trash2 className="h-5 w-5 text-red-400" />
+                </div>
+                <h2 className="font-semibold text-[var(--fg)]">Delete Game</h2>
+              </div>
+              <p className="text-sm text-[var(--fg-muted)] mb-1">
+                Are you sure you want to delete <span className="font-medium text-[var(--fg)]">{game?.name}</span>?
+              </p>
+              <p className="text-xs text-[var(--fg-muted)] mb-5">
+                This will reverse all hall points awarded from this game. This action cannot be undone.
+              </p>
+              {deleteError && (
+                <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 mb-4">{deleteError}</p>
+              )}
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmDelete(false)} className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--bg-surface-2)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-all">
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 disabled:opacity-60 transition-all"
+                >
+                  {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  {deleting ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <div className="space-y-6">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-[var(--fg-muted)]">
@@ -97,13 +174,24 @@ export function GameDetail() {
                   <p className="text-[var(--fg-muted)] text-sm mt-1">{game.description}</p>
                 )}
               </div>
-              <Link
-                to={`/halls/${hallId}`}
-                className="flex items-center gap-1 text-sm text-violet-400 hover:text-violet-300 flex-shrink-0"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Back to hall
-              </Link>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {canDelete && (
+                  <button
+                    onClick={() => setConfirmDelete(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </button>
+                )}
+                  <Link
+                    to={`/halls/${hallId}?tab=games`}
+                    className="flex items-center gap-1 text-sm text-violet-400 hover:text-violet-300"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Back to hall
+                  </Link>
+              </div>
             </div>
 
             {game && (

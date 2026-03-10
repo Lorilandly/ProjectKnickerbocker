@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import {
@@ -10,7 +10,7 @@ import { Layout } from '@/components/Layout'
 import { LeaderboardChart } from '@/components/LeaderboardChart'
 import { PointsTrendChart } from '@/components/PointsTrendChart'
 import { Spotlight } from '@/components/ui/spotlight'
-import { useHall, useHallStats, useHallMembers, useHallRecords, useHallGames, useTrendData } from '@/hooks'
+import { useMe, useHall, useHallStats, useHallMembers, useHallRecords, useHallGames, useTrendData } from '@/hooks'
 import { api, groupRecordsByGame } from '@/api'
 import { cn } from '@/lib/cn'
 import type { HallRecordEntry, UserSearchResult } from '@/types'
@@ -475,14 +475,43 @@ function GamesTab({ hallId }: { hallId: number }) {
 
 // ─── Members Tab ──────────────────────────────────────────────────────────────
 
-function MembersTab({ hallId }: { hallId: number }) {
+function MembersTab({ hallId, canManage }: { hallId: number; canManage: boolean }) {
   const { t } = useTranslation()
   const state = useHallMembers(hallId)
+  const [actionPending, setActionPending] = useState<number | null>(null)
+  const [roleOverrides, setRoleOverrides] = useState<Map<number, 'admin' | 'member'>>(new Map())
+  const [actionError, setActionError]     = useState<string | null>(null)
 
   const sorted = useMemo(() => {
     if (state.status !== 'ok') return []
     return [...state.data].sort((a, b) => b.member.points - a.member.points)
   }, [state])
+
+  async function handlePromote(userId: number) {
+    setActionPending(userId)
+    setActionError(null)
+    try {
+      await api.promoteUser(hallId, userId)
+      setRoleOverrides(prev => new Map(prev).set(userId, 'admin'))
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to promote user.')
+    } finally {
+      setActionPending(null)
+    }
+  }
+
+  async function handleDemote(userId: number) {
+    setActionPending(userId)
+    setActionError(null)
+    try {
+      await api.demoteUser(hallId, userId)
+      setRoleOverrides(prev => new Map(prev).set(userId, 'member'))
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to demote user.')
+    } finally {
+      setActionPending(null)
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -490,42 +519,72 @@ function MembersTab({ hallId }: { hallId: number }) {
       {state.status === 'error' && (
         <p className="text-center py-8 text-red-400">{state.error.message}</p>
       )}
-      {sorted.map(({ member, name }, i) => (
-        <motion.div
-          key={member.id}
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: i * 0.06 }}
-          className="flex items-center gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 hover:bg-[var(--bg-surface-2)] transition-all"
-        >
-          <span className="w-7 text-center text-base">
-            {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`}
-          </span>
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500/30 to-cyan-500/30 text-sm font-bold text-[var(--fg)]">
-            {name.charAt(0).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="font-medium text-[var(--fg)] truncate">{name}</p>
-              {member.role === 'admin' && (
-                <span className="flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-400 flex-shrink-0">
-                  <Crown className="h-3 w-3" />
-                  {t('halls.role.admin')}
-                </span>
-              )}
+      {actionError && (
+        <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5">{actionError}</p>
+      )}
+      {sorted.map(({ member, name }, i) => {
+        const effectiveRole = roleOverrides.get(member.user_id) ?? member.role
+        const isAdmin = effectiveRole === 'admin'
+        const isPending = actionPending === member.user_id
+        return (
+          <motion.div
+            key={member.id}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.06 }}
+            className="flex items-center gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 hover:bg-[var(--bg-surface-2)] transition-all"
+          >
+            <span className="w-7 text-center text-base">
+              {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`}
+            </span>
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500/30 to-cyan-500/30 text-sm font-bold text-[var(--fg)]">
+              {name.charAt(0).toUpperCase()}
             </div>
-            <p className="text-xs text-[var(--fg-muted)]">
-              {t('hall.rank')} #{i + 1} · Joined {new Date(member.joined_at).toLocaleDateString()}
-            </p>
-          </div>
-          <div className="text-right flex-shrink-0">
-            <p className={cn('text-xl font-black', member.points >= 0 ? 'text-emerald-400' : 'text-red-400')}>
-              {member.points >= 0 ? '+' : ''}{member.points.toFixed(1)}
-            </p>
-            <p className="text-xs text-[var(--fg-muted)]">{t('hall.points')}</p>
-          </div>
-        </motion.div>
-      ))}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-[var(--fg)] truncate">{name}</p>
+                {isAdmin && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-400 flex-shrink-0">
+                    <Crown className="h-3 w-3" />
+                    {t('halls.role.admin')}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[var(--fg-muted)]">
+                {t('hall.rank')} #{i + 1} · Joined {new Date(member.joined_at).toLocaleDateString()}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {canManage && !isAdmin && (
+                <button
+                  onClick={() => handlePromote(member.user_id)}
+                  disabled={isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 disabled:opacity-50 transition-all flex-shrink-0"
+                >
+                  {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Crown className="h-3 w-3" />}
+                  Make Admin
+                </button>
+              )}
+              {canManage && isAdmin && (
+                <button
+                  onClick={() => handleDemote(member.user_id)}
+                  disabled={isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--bg-surface-2)] text-[var(--fg-muted)] border border-[var(--border)] hover:text-red-400 hover:border-red-500/30 disabled:opacity-50 transition-all flex-shrink-0"
+                >
+                  {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Crown className="h-3 w-3" />}
+                  Revoke Admin
+                </button>
+              )}
+              <div className="text-right flex-shrink-0">
+                <p className={cn('text-xl font-black', member.points >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+                  {member.points >= 0 ? '+' : ''}{member.points.toFixed(1)}
+                </p>
+                <p className="text-xs text-[var(--fg-muted)]">{t('hall.points')}</p>
+              </div>
+            </div>
+          </motion.div>
+        )
+      })}
     </div>
   )
 }
@@ -535,15 +594,32 @@ function MembersTab({ hallId }: { hallId: number }) {
 export function HallDetail() {
   const { id } = useParams<{ id: string }>()
   const { t } = useTranslation()
-  const [activeTab, setActiveTab]   = useState<Tab>('dashboard')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabFromUrl = searchParams.get('tab') as Tab | null
+  const VALID_TABS: Tab[] = ['dashboard', 'table', 'games', 'members']
+  const [activeTab, setActiveTab] = useState<Tab>(
+    tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : 'dashboard'
+  )
   const [inviteOpen, setInviteOpen] = useState(false)
 
+  function switchTab(tab: Tab) {
+    setActiveTab(tab)
+    setSearchParams(tab === 'dashboard' ? {} : { tab }, { replace: true })
+  }
+
   const hallId = Number(id)
-  const hallState   = useHall(hallId)
+  const meState      = useMe()
+  const hallState    = useHall(hallId)
   const membersState = useHallMembers(hallId)
 
   const hall = hallState.status === 'ok' ? hallState.data : null
   const memberCount = membersState.status === 'ok' ? membersState.data.length : '…'
+
+  const currentUserId   = meState.status === 'ok' ? meState.data.id : null
+  const isServerAdmin   = meState.status === 'ok' && !!meState.data.is_server_admin
+  const isHallAdmin     = membersState.status === 'ok'
+    && membersState.data.some(m => m.member.user_id === currentUserId && m.member.role === 'admin')
+  const canManage = isServerAdmin || isHallAdmin
 
   if (hallState.status === 'error') {
     return <Layout><p className="text-center py-12 text-red-400">{hallState.error.message}</p></Layout>
@@ -589,13 +665,15 @@ export function HallDetail() {
                     <Coins className="h-4 w-4" />
                     {t('hall.chipInOut')}
                   </button>
-                  <button
-                    onClick={() => setInviteOpen(true)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-surface-2)] border border-[var(--border)] text-[var(--fg-muted)] hover:text-[var(--fg)] text-sm font-medium transition-all"
-                  >
-                    <UserPlus className="h-4 w-4" />
-                    {t('hall.inviteUser')}
-                  </button>
+                  {canManage && (
+                    <button
+                      onClick={() => setInviteOpen(true)}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-surface-2)] border border-[var(--border)] text-[var(--fg-muted)] hover:text-[var(--fg)] text-sm font-medium transition-all"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      {t('hall.inviteUser')}
+                    </button>
+                  )}
                   <Link
                     to={`/halls/${hallId}/games/new`}
                     className="flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-all shadow-lg shadow-violet-500/20"
@@ -617,7 +695,7 @@ export function HallDetail() {
             return (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => switchTab(tab.key)}
                 className={cn(
                   'relative flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200',
                   active
@@ -651,7 +729,7 @@ export function HallDetail() {
             {activeTab === 'dashboard' && <DashboardTab hallId={hallId} />}
             {activeTab === 'table'     && <TableTab hallId={hallId} />}
             {activeTab === 'games'     && <GamesTab hallId={hallId} />}
-            {activeTab === 'members'   && <MembersTab hallId={hallId} />}
+            {activeTab === 'members'   && <MembersTab hallId={hallId} canManage={canManage} />}
           </motion.div>
         </AnimatePresence>
       </div>

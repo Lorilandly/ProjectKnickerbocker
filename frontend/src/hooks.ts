@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, computeTrendData, groupRecordsByGame } from '@/api'
 import type {
-  Game, Hall, HallMemberWithUser, HallRecordEntry,
+  AuthMe, Game, Hall, HallMemberWithUser, HallRecordEntry,
   HallStats, InviteWithHall, LeaderboardEntry,
   UserHistoryEntry, UserStats,
 } from '@/types'
@@ -42,6 +42,10 @@ export function useApi<T>(fn: () => Promise<T>, key: unknown = null): AsyncState
 }
 
 // ── Resource hooks ────────────────────────────────────────────────────────────
+
+export function useMe(): AsyncState<AuthMe> {
+  return useApi(() => api.getMe())
+}
 
 export function useHalls(): AsyncState<Hall[]> {
   return useApi(() => api.listHalls())
