@@ -2,21 +2,22 @@ name: Docker
 
 on:
   push:
+    tags: ['v*']
     branches: [master]
 
 jobs:
   docker:
     name: Build & Push
     runs-on: ubuntu-latest
-    # Only run after CI passes
-    needs: []
-
+    # Only push on version tags; on master pushes the images are built but not pushed
     steps:
       - uses: actions/checkout@v4
 
       - uses: docker/setup-buildx-action@v3
 
-      - uses: docker/login-action@v3
+      - name: Log in to Docker Hub
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -25,10 +26,10 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./backend
-          push: true
+          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/knickerbocker-backend:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/knickerbocker-backend:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/knickerbocker-backend:${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -36,9 +37,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
-          push: true
+          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/knickerbocker-frontend:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/knickerbocker-frontend:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/knickerbocker-frontend:${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
