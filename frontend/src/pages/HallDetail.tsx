@@ -185,19 +185,19 @@ function DashboardTab({ hallId }: { hallId: number }) {
 
   const { trendData, trendLines } = useMemo(() => {
     if (trendState.status !== 'ok') return { trendData: [], trendLines: [] }
-    const data = trendState.data
+    const { rows, userMap } = trendState.data
     const keys = new Set<string>()
-    for (const row of data) {
+    for (const row of rows) {
       for (const k of Object.keys(row)) {
-        if (k !== 'date') keys.add(k)
+        if (k !== 'date' && k !== '_label') keys.add(k)
       }
     }
     const lines = Array.from(keys).map((key, i) => ({
       key,
       color: TREND_COLORS[i % TREND_COLORS.length],
-      name: key,
+      name: userMap.get(key) ?? key,
     }))
-    return { trendData: data, trendLines: lines }
+    return { trendData: rows, trendLines: lines }
   }, [trendState])
 
   const recentGames = statsState.status === 'ok' ? statsState.data.recent_games : []

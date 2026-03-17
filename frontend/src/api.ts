@@ -190,20 +190,29 @@ function uniqueGamesAsc(records: HallRecordEntry[]): GameStub[] {
  * Returns rows keyed as `{ date: string, [user_name]: number, … }`
  * to match PointsTrendChart's XAxis dataKey="date".
  */
-export function computeTrendData(
-  records: HallRecordEntry[],
-): Array<Record<string, number | string>> {
-  if (records.length === 0) return []
+export type TrendData = {
+  rows: Array<Record<string, number | string>>
+  userMap: Map<string, string>
+}
+
+export function computeTrendData(records: HallRecordEntry[]): TrendData {
+  if (records.length === 0) return { rows: [], userMap: new Map() }
 
   const games = uniqueGamesAsc(records)
   const byGame = groupRecordsByGame(records)
 
+  const userMap = new Map<string, string>()
+  for (const r of records) {
+    userMap.set(String(r.user_id), r.user_name)
+  }
+
   const cumulative: Record<string, number> = {}
-  return games.map(({ game_id, game_name }) => {
+  const rows = games.map(({ game_id, game_name }) => {
     for (const r of byGame.get(game_id) ?? []) {
-      cumulative[r.user_name] =
-        (cumulative[r.user_name] ?? 0) + r.points * r.point_conversion_rate
+      const uid = String(r.user_id)
+      cumulative[uid] = (cumulative[uid] ?? 0) + r.points * r.point_conversion_rate
     }
-    return { date: game_name.slice(0, 12), ...cumulative }
+    return { date: String(game_id), _label: game_name.slice(0, 12), ...cumulative }
   })
+  return { rows, userMap }
 }
