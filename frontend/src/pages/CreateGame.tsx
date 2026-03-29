@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ChevronLeft, Plus, Trash2, Gamepad2 } from 'lucide-react'
 import { Layout } from '@/components/Layout'
-import { useHallMembers, useHall } from '@/hooks'
+import { useHallMembers, useHall, useMe } from '@/hooks'
 import { api } from '@/api'
 import { cn } from '@/lib/cn'
 
@@ -19,7 +19,20 @@ export function CreateGame() {
 
   const hallState    = useHall(id)
   const membersState = useHallMembers(id)
+  const meState      = useMe()
   const members      = membersState.status === 'ok' ? membersState.data : []
+
+  const currentUserId = meState.status === 'ok' ? meState.data.id : null
+  const isServerAdmin = meState.status === 'ok' && !!meState.data.is_server_admin
+  const isHallAdmin   = membersState.status === 'ok'
+    && membersState.data.some(m => m.member.user_id === currentUserId && m.member.role === 'admin')
+  const canManage = isServerAdmin || isHallAdmin
+
+  useEffect(() => {
+    if (meState.status === 'ok' && membersState.status === 'ok' && !canManage) {
+      navigate(`/halls/${id}`, { replace: true })
+    }
+  }, [meState.status, membersState.status, canManage, navigate, id])
 
   const [name, setName]               = useState('')
   const [description, setDescription] = useState('')

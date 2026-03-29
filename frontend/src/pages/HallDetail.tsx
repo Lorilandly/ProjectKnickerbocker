@@ -376,7 +376,7 @@ function TableTab({ hallId }: { hallId: number }) {
 
 // ─── Games Tab ────────────────────────────────────────────────────────────────
 
-function GamesTab({ hallId }: { hallId: number }) {
+function GamesTab({ hallId, canManage }: { hallId: number; canManage: boolean }) {
   const { t } = useTranslation()
   const gamesState  = useHallGames(hallId)
   const recordsState = useHallRecords(hallId)
@@ -394,13 +394,15 @@ function GamesTab({ hallId }: { hallId: number }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-[var(--fg-muted)]">{allGames.length} games total</p>
-        <Link
-          to={`/halls/${hallId}/games/new`}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-all shadow-lg shadow-violet-500/20"
-        >
-          <Plus className="h-4 w-4" />
-          {t('hall.addGame')}
-        </Link>
+        {canManage && (
+          <Link
+            to={`/halls/${hallId}/games/new`}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-all shadow-lg shadow-violet-500/20"
+          >
+            <Plus className="h-4 w-4" />
+            {t('hall.addGame')}
+          </Link>
+        )}
       </div>
 
       {gamesState.status === 'loading' && <Loading />}
@@ -660,12 +662,12 @@ export function HallDetail() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-surface-2)] border border-[var(--border)] text-[var(--fg-muted)] hover:text-[var(--fg)] text-sm font-medium transition-all">
-                    <Coins className="h-4 w-4" />
-                    {t('hall.chipInOut')}
-                  </button>
-                  {canManage && (
+                {canManage && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-surface-2)] border border-[var(--border)] text-[var(--fg-muted)] hover:text-[var(--fg)] text-sm font-medium transition-all">
+                      <Coins className="h-4 w-4" />
+                      {t('hall.chipInOut')}
+                    </button>
                     <button
                       onClick={() => setInviteOpen(true)}
                       className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-surface-2)] border border-[var(--border)] text-[var(--fg-muted)] hover:text-[var(--fg)] text-sm font-medium transition-all"
@@ -673,15 +675,15 @@ export function HallDetail() {
                       <UserPlus className="h-4 w-4" />
                       {t('hall.inviteUser')}
                     </button>
-                  )}
-                  <Link
-                    to={`/halls/${hallId}/games/new`}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-all shadow-lg shadow-violet-500/20"
-                  >
-                    <Plus className="h-4 w-4" />
-                    {t('hall.addGame')}
-                  </Link>
-                </div>
+                    <Link
+                      to={`/halls/${hallId}/games/new`}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-all shadow-lg shadow-violet-500/20"
+                    >
+                      <Plus className="h-4 w-4" />
+                      {t('hall.addGame')}
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
           </Spotlight>
@@ -728,7 +730,7 @@ export function HallDetail() {
           >
             {activeTab === 'dashboard' && <DashboardTab hallId={hallId} />}
             {activeTab === 'table'     && <TableTab hallId={hallId} />}
-            {activeTab === 'games'     && <GamesTab hallId={hallId} />}
+            {activeTab === 'games'     && <GamesTab hallId={hallId} canManage={canManage} />}
             {activeTab === 'members'   && <MembersTab hallId={hallId} canManage={canManage} />}
           </motion.div>
         </AnimatePresence>
