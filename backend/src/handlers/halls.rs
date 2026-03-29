@@ -313,6 +313,43 @@ pub async fn demote_user(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn kick_member(
+    State(state): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    Path((id, user_id)): Path<(i64, i64)>,
+) -> Result<StatusCode, (StatusCode, &'static str)> {
+    let is_admin = require_hall_admin(&state.db, id, user.id).await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    if !is_admin && !is_server_admin(&state, &user.email) {
+        return Err((StatusCode::FORBIDDEN, "Hall admin required"));
+    }
+
+    if user.id == user_id {
+        return Err((StatusCode::BAD_REQUEST, "Cannot kick yourself"));
+    }
+
+    let target_is_admin = require_hall_admin(&state.db, id, user_id).await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    if target_is_admin {
+        return Err((StatusCode::FORBIDDEN, "Cannot kick a hall admin"));
+    }
+
+    let result = sqlx::query("DELETE FROM hall_members WHERE hall_id = ? AND user_id = ?")
+        .bind(id)
+        .bind(user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
+
+    if result.rows_affected() == 0 {
+        return Err((StatusCode::NOT_FOUND, "User is not a hall member"));
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn list_invites(
     State(state): State<Arc<AppState>>,
     AuthUser(user): AuthUser,

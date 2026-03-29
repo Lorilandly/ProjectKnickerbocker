@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import {
   LayoutDashboard, Table2, Gamepad2, UserPlus, Plus, ChevronLeft,
-  Crown, ArrowUpDown, ArrowUp, ArrowDown, Search, Coins, Trophy, X, Check, Loader2,
+  Crown, ArrowUpDown, ArrowUp, ArrowDown, Search, Coins, Trophy, X, Check, Loader2, UserX,
 } from 'lucide-react'
 import { Layout } from '@/components/Layout'
 import { LeaderboardChart } from '@/components/LeaderboardChart'
@@ -477,7 +477,7 @@ function GamesTab({ hallId, canManage }: { hallId: number; canManage: boolean })
 
 // ─── Members Tab ──────────────────────────────────────────────────────────────
 
-function MembersTab({ hallId, canManage }: { hallId: number; canManage: boolean }) {
+function MembersTab({ hallId, canManage, currentUserId }: { hallId: number; canManage: boolean; currentUserId: number | null }) {
   const { t } = useTranslation()
   const state = useHallMembers(hallId)
   const [actionPending, setActionPending] = useState<number | null>(null)
@@ -510,6 +510,18 @@ function MembersTab({ hallId, canManage }: { hallId: number; canManage: boolean 
       setRoleOverrides(prev => new Map(prev).set(userId, 'member'))
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to demote user.')
+    } finally {
+      setActionPending(null)
+    }
+  }
+
+  async function handleKick(userId: number) {
+    setActionPending(userId)
+    setActionError(null)
+    try {
+      await api.kickMember(hallId, userId)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to kick member.')
     } finally {
       setActionPending(null)
     }
@@ -575,6 +587,16 @@ function MembersTab({ hallId, canManage }: { hallId: number; canManage: boolean 
                 >
                   {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Crown className="h-3 w-3" />}
                   Revoke Admin
+                </button>
+              )}
+              {canManage && !isAdmin && member.user_id !== currentUserId && (
+                <button
+                  onClick={() => handleKick(member.user_id)}
+                  disabled={isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 disabled:opacity-50 transition-all flex-shrink-0"
+                >
+                  {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserX className="h-3 w-3" />}
+                  Kick
                 </button>
               )}
               <div className="text-right flex-shrink-0">
@@ -731,7 +753,7 @@ export function HallDetail() {
             {activeTab === 'dashboard' && <DashboardTab hallId={hallId} />}
             {activeTab === 'table'     && <TableTab hallId={hallId} />}
             {activeTab === 'games'     && <GamesTab hallId={hallId} canManage={canManage} />}
-            {activeTab === 'members'   && <MembersTab hallId={hallId} canManage={canManage} />}
+            {activeTab === 'members'   && <MembersTab hallId={hallId} canManage={canManage} currentUserId={currentUserId} />}
           </motion.div>
         </AnimatePresence>
       </div>

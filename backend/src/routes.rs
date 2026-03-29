@@ -1,5 +1,5 @@
 use axum::{
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use std::sync::Arc;
@@ -9,8 +9,8 @@ use crate::handlers::{
     auth::{google_callback, google_login, logout, me},
     games::{create_game, delete_game, get_game, get_game_results, list_games, update_game},
     halls::{
-        assign_user, create_chip_record, create_hall, demote_user, get_hall, invite_user, leaderboard,
-        list_halls, list_invites, list_members, list_records, promote_user,
+        assign_user, create_chip_record, create_hall, demote_user, get_hall, invite_user, kick_member,
+        leaderboard, list_halls, list_invites, list_members, list_records, promote_user,
     },
     invites::{accept_invite, decline_invite, my_invites},
     stats::{hall_stats, hall_trend, my_history, my_stats},
@@ -29,6 +29,7 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
         .route("/halls", get(list_halls).post(create_hall))
         .route("/halls/:id", get(get_hall))
         .route("/halls/:id/members", get(list_members))
+        .route("/halls/:id/members/:user_id", delete(kick_member))
         .route("/halls/:id/leaderboard", get(leaderboard))
         .route("/halls/:id/assign", post(assign_user))
         .route("/halls/:id/invite", post(invite_user))

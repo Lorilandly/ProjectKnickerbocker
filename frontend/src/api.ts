@@ -110,6 +110,8 @@ export const api = {
     request<void>(`/api/halls/${hallId}/promote`, { method: 'POST', ...json({ user_id: userId }) }),
   demoteUser: (hallId: number, userId: number) =>
     request<void>(`/api/halls/${hallId}/demote`, { method: 'POST', ...json({ user_id: userId }) }),
+  kickMember: (hallId: number, userId: number) =>
+    request<void>(`/api/halls/${hallId}/members/${userId}`, { method: 'DELETE' }),
   listHallInvites: (hallId: number) =>
     request<HallInvite[]>(`/api/halls/${hallId}/invites`),
   chip: (hallId: number, body: { user_id: number; amount: number; note?: string }) =>
